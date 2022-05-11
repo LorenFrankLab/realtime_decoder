@@ -21,7 +21,7 @@ setup(
                       'Cython',
                       'trodesnetwork',
                       'pyqtgraph',
-                      'pyyaml'
+                      'oyaml'
                      ],
     author_email='jpc6@rice.edu',
     description='Realtime clusterless decoding',
@@ -29,5 +29,5 @@ setup(
     keywords="neuroscience clusterless decoding",
     include_package_data=True,
     platforms='any',
-    classifiers=['Programming Language :: Python :: 3']
+    classifiers=['Programming Language :: Python :: 3'],
 )
