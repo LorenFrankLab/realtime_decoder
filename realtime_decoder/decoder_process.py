@@ -366,7 +366,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         self._spike_msg_ct = 0
 
-        self._pos_msg_ct = 0
+        self._pos_ct = 0
         self._pos_timestamp = 0
         self._current_pos = 0 # mapped position
         self._current_vel = 0
@@ -550,7 +550,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._pos_timestamp = pos_msg.timestamp
 
         if (
-            self._pos_msg_ct % self.p['num_pos_points'] == 0 and
+            self._pos_ct % self.p['num_pos_points'] == 0 and
             self.p["taskstate_file"] is not None
         ):
 
@@ -618,8 +618,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._config['rank']['supervisor'][0], self._vel_pos_msg
         )
             
-        self._pos_msg_ct += 1
-        if self._pos_msg_ct % self.p['num_pos_disp'] == 0:
+        self._pos_ct += 1
+        if self._pos_ct % self.p['num_pos_disp'] == 0:
             print(
                 'position =', self._current_pos,
                 'and velocity =', np.around(self._current_vel, decimals=2),

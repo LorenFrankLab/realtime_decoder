@@ -374,7 +374,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
     def _init_timings(self, trode):
         dt = np.dtype([
             ('timestamp', '=i8'),
-            ('t_sys', '=i8'),
+            ('t_send_data', '=i8'),
             ('t_recv_data', '=i8'),
             ('t_start_kde', '=i8'),
             ('t_end_kde', '=i8'),
@@ -568,7 +568,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
 
     def _record_timings(
         self, trode, timestamp,
-        t_sys, t_recv_data,
+        t_send_data, t_recv_data,
         t_start_kde, t_end_kde,
         t_start_enc_send, t_end_enc_send
     ):
@@ -588,7 +588,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         # write to timings array
         tarr = self._times[trode]
         tarr[ind]['timestamp'] = timestamp
-        tarr[ind]['t_sys'] = t_sys
+        tarr[ind]['t_send_data'] = t_send_data
         tarr[ind]['t_recv_data'] = t_recv_data
         tarr[ind]['t_start_kde'] = t_start_kde
         tarr[ind]['t_end_kde'] = t_end_kde
