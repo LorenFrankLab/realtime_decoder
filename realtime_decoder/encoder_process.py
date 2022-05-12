@@ -361,6 +361,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['smooth_speed'] = self._config['kinematics']['smooth_speed']
         self.p['vel_thresh'] = self._config['encoder']['vel_thresh']
         self.p['cred_interval'] = self._config['cred_interval']['val']
+        self.p['timings_bufsize'] = self._config['encoder']['timings_bufsize']
         self.p['num_encoding_disp'] = self._config['display']['encoder']['encoding_spikes']
         self.p['num_total_disp'] = self._config['display']['encoder']['total_spikes']
         self.p['num_pos_disp'] = self._config['display']['encoder']['position']
@@ -382,7 +383,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             ('t_end_enc_send', '=i8')
         ])
         self._times[trode] = np.zeros(
-            self._config['encoder']['timings_bufsize'],
+            self.p['timings_bufsize'],
             dtype=dt
         )
         self._times_ind[trode] = 0
@@ -432,7 +433,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
 
                 self._record_timings(
                     elec_grp_id, spike_timestamp,
-                    spike_msg.systime, spike_msg.t_recv_data,
+                    spike_msg.t_send_data, spike_msg.t_recv_data,
                     t_start_kde, t_end_kde,
                     t_start_enc_send, t_end_enc_send
                 )
@@ -580,7 +581,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._times[trode] = np.hstack((
                 self._times[trode],
                 np.zeros(
-                    self._config['encoder']['timings_bufsize'],
+                    self.p['timings_bufsize'],
                     dtype=self._times[trode].dtype
                 )
             ))

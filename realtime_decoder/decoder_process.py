@@ -380,9 +380,9 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._times = {}
         self._times_ind = {}
 
+        self._init_params()
         self._init_timings()
         self._set_up_trodes()
-        self._init_params()
 
     def next_iter(self):
 
@@ -460,7 +460,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
                 ('t_end_post', '=i8')
             ])
             self._times['posterior'] = np.zeros(
-                self._config['decoder']['timings_bufsize'],
+                self.p['timings_bufsize'],
                 dtype=dt
             )
             self._times_ind['posterior'] = 0
@@ -470,7 +470,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
                 ('t_decoder', '=i8'),
             ])
             self._times[trode] = np.zeros(
-                self._config['decoder']['timings_bufsize'],
+                self.p['timings_bufsize'],
                 dtype=dt
             )
             self._times_ind[trode] = 0
@@ -491,6 +491,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['cred_interval'] = self._config['cred_interval']['val']
         self.p['cred_int_max'] = self._config['cred_interval']['max_num']
         self.p['cred_int_bufsize'] = self._config['decoder']['cred_int_bufsize']
+        self.p['timings_bufsize'] = self._config['decoder']['timings_bufsize']
         self.p['num_pos_points'] = self._config['decoder']['num_pos_points']
         self.p['num_pos_disp'] = self._config['display']['decoder']['position']
         self.p['num_spikes_disp'] = self._config['display']['decoder']['total_spikes']
@@ -637,7 +638,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._times[trode] = np.hstack((
                 self._times[trode],
                 np.zeros(
-                    self._config['decoder']['timings_bufsize'],
+                    self.p['timings_bufsize'],
                     dtype=self._times[trode].dtype
                 )
             ))
@@ -660,7 +661,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._times['posterior'] = np.hstack((
                 self._times['posterior'],
                 np.zeros(
-                    self._config['decoder']['timings_bufsize'],
+                    self.p['timings_bufsize'],
                     dtype=self._times['posterior'].dtype
                 )
             ))
