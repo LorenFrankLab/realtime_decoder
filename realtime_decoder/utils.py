@@ -74,7 +74,6 @@ def apply_no_anim_boundary(x_bins, arm_coor, image, fill=0):
             image[:, bounds[0]:bounds[1]] = fill
     return image
 
-
 def get_task_state(taskfile):
 
     with open(taskfile, 'rb') as f:

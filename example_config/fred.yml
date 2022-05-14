@@ -29,6 +29,8 @@ trode_selection:
     48,50,52,53,54,55,56,58,64
   ]
 decoder_assignment:
+  # key is the decoder rank. the list consists of
+  # the decoding trodes
   1: [
     1,2,3,4,6,7,8,9,10,11,
     13,14,15,16,17,18,19,20,21,22,
@@ -37,17 +39,17 @@ decoder_assignment:
     48,50,52,53,54,55,56,58,64
   ]
 files:
-  output_dir: 'data/simulate-live'
+  output_dir: 'data/decoder-output'
   prefix: 'fred'
   rec_postfix: 'bin_rec'
   timing_postfix: 'timing'
-  # backup_dir : 'data/fred-simulate-live-backup' # optional
-  saved_model_dir: 'data/fred-simulate-live' # only used if using a pre-loaded model
+  # backup_dir : 'data/decoder-output-backup' # optional
+  saved_model_dir: 'data/decoder-output' # only used if using a pre-loaded model
 algorithm: "clusterless_decoder"
 datasource: "trodes"
 num_setup_messages: 100
-preloaded_model: true   # be sure to change appropriately! ####################################################################################
-frozen_model: true      # be sure to change appropriately! ####################################################################################
+preloaded_model: false   # be sure to change appropriately! ####################################################################################
+frozen_model: false      # be sure to change appropriately! ####################################################################################
 trodes:
   config_file: '20210419_fred_06_r3.trodesconf'
   # taskstate_file: '/path/to/task/state' # optional
@@ -64,9 +66,10 @@ ripples:
     kwargs:
       btype: 'bandpass'
       ftype: 'butter'
-    num_taps: 21
-    band_edges: [140, 150, 250, 260]
-    desired: [0, 1, 1, 0]
+    # type: 'fir'
+    # num_taps: 21
+    # band_edges: [140, 150, 250, 260]
+    # desired: [0, 1, 1, 0]
   smoothing_filter:
     num_taps: 15
     band_edges: [50, 55]
@@ -85,7 +88,7 @@ ripples:
 encoder:
   spk_amp: 200 # fred specific
   mark_dim: 4
-  position: # remy specific
+  position: # fred specific
     lower: 0
     upper: 41
     num_bins: 41
@@ -122,16 +125,33 @@ gui:
   num_xticks: 5
 stimulation:
   instructive: true
-  replay_target_arm: 1
-  posterior_sum_threshold: 0.4
-  max_center_well_dist: 17
   shortcut_msg_on: true
+  num_pos_points: 150
+  center_well_loc: [638,653] # camera coordinates
+  max_center_well_dist: 17
+  replay:
+    enabled: true
+    method: "map"
+    target_arm: 1
+    stim_lockout: 0.2
+    sliding_window: 5 # number of decoder time bins
+    posterior_sum_threshold: 0.4
+    max_arm_repeats: 8
   ripples:
+    enabled: true
+    type: "standard"
+    method: "multichannel"
+    stim_lockout: 0.2
+    detect_lockout: 0.2
     num_above_thresh: 4
   head_direction:
+    enabled: true
+    rotate_180: true
+    stim_lockout: 10
     min_duration: 2
     well_angle_range: 3
     within_angle_range: 25
+    well_loc: [[928.895, 255.175], [301.263, 277.608]]
 kinematics:
   smooth_x: true
   smooth_y: true
@@ -140,8 +160,10 @@ kinematics:
   scale_factor: 0.222 # to scale raw position input to cm
 cred_interval:
   val: 0.5
-  max_num : 5
+  max_num: 5
 display:
+  main:
+    position: 150
   ripples:
     lfp: 100000
   encoder:
@@ -152,7 +174,6 @@ display:
   decoder:
     total_spikes: 50000
     occupancy: 100
-    position: 150
 process_monitor:
   interval: 15 # how often (in seconds) to check processes. set to <= 0 to disable
   timeout: 3 # in seconds, needs to be sufficiently long to receive messages from all ranks

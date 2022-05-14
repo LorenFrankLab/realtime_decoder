@@ -219,6 +219,8 @@ def get_dtype(msg_type:str, *, config:Dict={}):
     elif msg_type == "VelocityPosition":
         dt = np.dtype([
             ('rank', '=i8'),
+            ('timestamp', '=i8'),
+            ('segment', '=i4'),
             ('raw_x', '=f8'),
             ('raw_y', '=f8'),
             ('raw_x2', '=f8'),

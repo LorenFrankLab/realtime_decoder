@@ -170,7 +170,7 @@ def setup(config_path, numprocs):
     
     if rank in config['rank']['supervisor']:
         trodes_client = trodesnet.TrodesClient(config)
-        stim_decider = stimulation.TrodesStimDecider(
+        stim_decider = stimulation.TwoArmTrodesStimDecider(
             rank, config, trodes_client
         )
         process = main_process.MainProcess(

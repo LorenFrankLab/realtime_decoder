@@ -493,10 +493,10 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['cred_int_bufsize'] = self._config['decoder']['cred_int_bufsize']
         self.p['timings_bufsize'] = self._config['decoder']['timings_bufsize']
         self.p['num_pos_points'] = self._config['decoder']['num_pos_points']
-        self.p['num_pos_disp'] = self._config['display']['decoder']['position']
         self.p['num_spikes_disp'] = self._config['display']['decoder']['total_spikes']
         self.p['tbin_samples'] = self._config['decoder']['time_bin']['samples']
-        self.p['tbin_delay_samples'] = self._config['decoder']['time_bin']['delay_samples'] 
+        self.p['tbin_delay_samples'] = self._config['decoder']['time_bin']['delay_samples']
+        self.p['first_decoder_rank'] = self._config['rank']['decoders'][0]
 
     
     def _process_spike(self, spike_msg):
@@ -608,26 +608,21 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             *occupancy
         )
 
-        self._vel_pos_msg[0]['rank'] = self.rank
-        self._vel_pos_msg[0]['raw_x'] = pos_msg.x
-        self._vel_pos_msg[0]['raw_y'] = pos_msg.y
-        self._vel_pos_msg[0]['raw_x2'] = pos_msg.x2
-        self._vel_pos_msg[0]['raw_y2'] = pos_msg.y2
-        self._vel_pos_msg[0]['mapped_pos'] = self._current_pos
-        self._vel_pos_msg[0]['velocity'] = self._current_vel
-        self.send_interface.send_velocity_position(
-            self._config['rank']['supervisor'][0], self._vel_pos_msg
-        )
+        if self.rank == self.p['first_decoder_rank']:
+            self._vel_pos_msg[0]['rank'] = self.rank
+            self._vel_pos_msg[0]['timestamp'] = pos_msg.timestamp
+            self._vel_pos_msg[0]['segment'] = pos_msg.segment
+            self._vel_pos_msg[0]['raw_x'] = pos_msg.x
+            self._vel_pos_msg[0]['raw_y'] = pos_msg.y
+            self._vel_pos_msg[0]['raw_x2'] = pos_msg.x2
+            self._vel_pos_msg[0]['raw_y2'] = pos_msg.y2
+            self._vel_pos_msg[0]['mapped_pos'] = self._current_pos
+            self._vel_pos_msg[0]['velocity'] = self._current_vel
+            self.send_interface.send_velocity_position(
+                self._config['rank']['supervisor'][0], self._vel_pos_msg
+            )
             
         self._pos_ct += 1
-        if self._pos_ct % self.p['num_pos_disp'] == 0:
-            print(
-                'position =', self._current_pos,
-                'and velocity =', np.around(self._current_vel, decimals=2),
-                'segment =', pos_msg.segment,
-                'raw_x', self._raw_x,
-                'raw_y', self._raw_y
-            )
 
     def _record_timings(self, trode, timestamp, t_decoder):
 
