@@ -13,22 +13,22 @@ class Datatypes(IntEnum):
 # Data returned by DataSourceReceivers
 class SpikePoint(messages.PrintableClass):
 
-    def __init__(self, timestamp, elec_grp_id, data, systime, t_recv_data):
+    def __init__(self, timestamp, elec_grp_id, data, t_send_data, t_recv_data):
 
         self.timestamp = timestamp
         self.elec_grp_id = elec_grp_id
         self.data = data
-        self.systime = systime
+        self.t_send_data = t_send_data
         self.t_recv_data = t_recv_data
 
 class LFPPoint(messages.PrintableClass):
 
-    def __init__(self, timestamp, elec_grp_ids, data, systime, t_recv_data):
+    def __init__(self, timestamp, elec_grp_ids, data, t_send_data, t_recv_data):
         
         self.timestamp = timestamp
         self.elec_grp_ids = elec_grp_ids
         self.data = data
-        self.systime = systime
+        self.t_send_data = t_send_data
         self.t_recv_data = t_recv_data
 
 class CameraModulePoint(messages.PrintableClass):
