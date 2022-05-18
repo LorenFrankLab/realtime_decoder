@@ -473,8 +473,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 if (
                     avg_arm_ps_1[1] > avg_arm_ps_2[1] and
                     avg_arm_ps_2[1] > secondary_arm_thresh and
-                    avg_arm_ps_1[2] < other_arm_thresh and # don't care about box/center well?
-                    avg_arm_ps_2[2] < other_arm_thresh # don't care about box/center well?
+                    np.all(avg_arm_ps_1[[0, 2]] < other_arm_thresh) and
+                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh)
                 ):
 
                     self._handle_replay(1, ts)
@@ -482,8 +482,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 elif (
                     avg_arm_ps_2[1] > avg_arm_ps_1[1] and
                     avg_arm_ps_1[1] > secondary_arm_thresh and
-                    avg_arm_ps_1[2] < other_arm_thresh and # don't care about box/center well?
-                    avg_arm_ps_2[2] < other_arm_thresh # don't care about box/center well?
+                    np.all(avg_arm_ps_1[[0, 2]] < other_arm_thresh) and
+                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh)
                 ):
 
                     self._handle_replay(1, ts)
@@ -497,16 +497,16 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 if (
                     avg_arm_ps_1[2] > avg_arm_ps_2[2] and
                     avg_arm_ps_2[2] > secondary_arm_thresh and
-                    avg_arm_ps_1[1] < other_arm_thresh and # don't care about box/center well?
-                    avg_arm_ps_2[1] < other_arm_thresh # don't care about box/center well?
+                    np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and
+                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh)
                 ):
                     self._handle_replay(2, ts)
 
                 elif (
                     avg_arm_ps_2[2] > avg_arm_ps_1[2] and
                     avg_arm_ps_1[2] > secondary_arm_thresh and
-                    avg_arm_ps_1[1] < other_arm_thresh and # don't care about box/center well?
-                    avg_arm_ps_2[1] < other_arm_thresh # don't care about box/center well?
+                    np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and
+                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh)
                 ):
                     self._handle_replay(2, ts)
 
