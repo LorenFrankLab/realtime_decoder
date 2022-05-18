@@ -234,7 +234,7 @@ class TabbedDialog(QDialog):
         layout.addWidget(self._post_thresh_button, 3, 2)
 
         value = float(
-            self._config['stimulation']['replay']['posterior_sum_threshold']
+            self._config['stimulation']['replay']['primary_arm_threshold']
         )
         self._post_edit.setText(str(value))
         self._main_params.posterior_threshold = value

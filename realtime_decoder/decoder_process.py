@@ -555,7 +555,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self.p["taskstate_file"] is not None
         ):
 
-            self._task_state = utils.get_task_state(self.p['taskstate_file'])
+            self._task_state = utils.get_last_num(self.p['taskstate_file'])
             if self._task_state != 1:
                 self._not_task_1_ct += 1
 
@@ -713,7 +713,6 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         # these are default values. if there are relevant spikes
         # in the time bin of interest, these will be populated
         # accordingly
-        spikes_in_bin_count = 0
         enc_cred_intervals = np.ones(self.p['cred_int_bufsize'], dtype=int) * np.nan
         enc_argmaxes = np.ones(self.p['cred_int_bufsize'], dtype=int) * np.nan
 
@@ -767,6 +766,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         else:
             # no spikes in time bin. however the decoder can automatically
             # handle this case
+            spikes_in_bin_count = 0
             t0 = time.time_ns()
             posterior, likelihood = self._decoder.compute_posterior(
                 np.atleast_2d(self._spike_buf[spikes_in_bin_mask])
@@ -794,6 +794,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._posterior_msg[0]['cred_int_lk'] = cred_int_lk
         self._posterior_msg[0]['enc_cred_intervals'] = enc_cred_intervals
         self._posterior_msg[0]['enc_argmaxes'] = enc_argmaxes
+        self._posterior_msg[0]['spike_count'] = spikes_in_bin_count
         self.send_interface.send_posterior(
             self._config['rank']['supervisor'][0], self._posterior_msg
         )

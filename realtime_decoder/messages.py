@@ -204,7 +204,7 @@ def get_dtype(msg_type:str, *, config:Dict={}):
         num_states = len(config[algorithm]['state_labels'])
         num_buff = config['decoder']['cred_int_bufsize']
         dt = np.dtype([
-            ('rank', '=i8'),
+            ('rank', '=i4'),
             ('lfp_timestamp', '=i8'),
             ('bin_timestamp_l', '=i8'),
             ('bin_timestamp_r', '=i8'),
@@ -214,11 +214,12 @@ def get_dtype(msg_type:str, *, config:Dict={}):
             ('cred_int_post', '=i8'),
             ('cred_int_lk', '=i8'),
             ('enc_cred_intervals', '=f8', (num_buff, )),
-            ('enc_argmaxes', '=f8', (num_buff, ))
+            ('enc_argmaxes', '=f8', (num_buff, )),
+            ('spike_count', '=i8')
         ])
     elif msg_type == "VelocityPosition":
         dt = np.dtype([
-            ('rank', '=i8'),
+            ('rank', '=i4'),
             ('timestamp', '=i8'),
             ('segment', '=i4'),
             ('raw_x', '=f8'),
@@ -230,8 +231,8 @@ def get_dtype(msg_type:str, *, config:Dict={}):
         ])
     elif msg_type == "DroppedSpikes":
         dt = np.dtype([
-            ('rank', '=i8'),
-            ('pct', '=f8')
+            ('rank', '=i4'),
+            ('pct', '=f4')
         ])
     else:
         raise ValueError(f"Unknown message type {msg_type}")

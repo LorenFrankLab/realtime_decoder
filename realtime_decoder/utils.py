@@ -24,7 +24,7 @@ def get_network_address(config):
     xmltree = ET.parse(config["trodes"]["config_file"])
     root = xmltree.getroot()
     network_config = root.find("NetworkConfiguration")
-    
+
     if network_config is None:
         raise ValueError("NetworkConfiguration section not defined")
 
@@ -74,31 +74,22 @@ def apply_no_anim_boundary(x_bins, arm_coor, image, fill=0):
             image[:, bounds[0]:bounds[1]] = fill
     return image
 
-def get_task_state(taskfile):
+def get_last_num(textfile):
 
-    with open(taskfile, 'rb') as f:
+    # assumes each line consists of one integer
+
+    with open(textfile, 'rb') as f:
         fd = f.fileno()
         fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
         f.seek(-2, os.SEEK_END)
         while f.read(1) != b'\n':
             f.seek(-2, os.SEEK_CUR)
-        task_state = int(f.readline().decode().rstrip('\r\n'))
+        last_num = int(f.readline().decode().rstrip('\r\n'))
 
-    return task_state
+    return last_num
 
-def read_rewards_file(rewards_file):
+def write_text_file(textfile, val):
 
-    with open(rewards_file, 'rb') as f:
-        fd = f.fileno()
-        fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-        f.seek(-2, os.SEEK_END)
-        while f.read(1) != b'\n':
-            f.seek(-2, os.SEEK_CUR)
-        
-        line = f.readline().decode().rstrip('\r\n')
-        stim_num, arm = tuple(line.split(' '))
-        stim_num = int(stim_num)
-        arm = int(arm)
+    with open(textfile, 'a') as f:
 
-    return stim_num, arm
-    
+        f.write(str(val) + '\n')

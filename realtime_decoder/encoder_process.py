@@ -500,7 +500,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             self.p["taskstate_file"] is not None
         ):
 
-            self._task_state = utils.get_task_state(self.p['taskstate_file'])
+            self._task_state = utils.get_last_num(self.p['taskstate_file'])
             if self._task_state != 1:
                 self._not_task_1_ct += 1
 

@@ -52,7 +52,10 @@ preloaded_model: false   # be sure to change appropriately! ####################
 frozen_model: false      # be sure to change appropriately! ####################################################################################
 trodes:
   config_file: '20210419_fred_06_r3.trodesconf'
-  # taskstate_file: '/path/to/task/state' # optional
+  # taskstate_file and instructive_file are optional,
+  # but not necessarily for a custom stim decider
+  taskstate_file: 'taskstate.txt'
+  instructive_file: 'instructive_new_arm.txt'
   voltage_scaling_factor: 0.195
 sampling_rate:
   spikes: 30000
@@ -133,21 +136,24 @@ stimulation:
     enabled: true
     method: "map"
     target_arm: 1
-    stim_lockout: 0.2
+    event_lockout: 0.2
     sliding_window: 5 # number of decoder time bins
-    posterior_sum_threshold: 0.4
+    primary_arm_threshold: 0.4
+    secondary_arm_threshold: 0.4
+    other_arm_threshold: 0.2
     max_arm_repeats: 8
+    instr_max_repeats: 3
+    min_unique_trodes: 2
   ripples:
     enabled: true
     type: "standard"
     method: "multichannel"
-    stim_lockout: 0.2
-    detect_lockout: 0.2
+    event_lockout: 0.2
     num_above_thresh: 4
   head_direction:
     enabled: true
     rotate_180: true
-    stim_lockout: 10
+    event_lockout: 10
     min_duration: 2
     well_angle_range: 3
     within_angle_range: 25

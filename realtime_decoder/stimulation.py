@@ -27,6 +27,14 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._trodes_client = trodes_client
 
         self._task_state = 1
+        self._num_rewards = np.zeros(
+            len(self._config['encoder']['position']['arm_coords']),
+            dtype=int
+        )
+        self._instr_rewards = np.zeros(
+            self._config['stimulation']['replay']['instr_max_repeats'],
+            dtype=int
+        )
 
         self._pos_msg_ct = 0
         self._current_pos = 0
@@ -43,6 +51,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._well_2_x = well_loc[1][0]
         self._well_2_y = well_loc[1][1]
         self._head_angle = 0
+        self._is_center_well_proximate = False
 
         self._init_stim_params()
         self._init_data_buffers()
@@ -81,7 +90,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         ):
             self._update_ripple_status(msg)
-        
         elif (
             msg[0]['is_consensus'] and
             self.p_ripples['type'] == msg[0]['ripple_type']
@@ -94,7 +102,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
     def _update_ripple_status(self, msg):
 
         if msg[0]['ripple_type'] == 'end':
-            
             trode = msg[0]['elec_grp_id']
             if self._is_in_multichannel_ripple and trode in self._ripple_trodes:
 
@@ -106,20 +113,18 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
                     self._ripple_timestamps = [] # reset vector of timestamps
                     self._is_in_multichannel_ripple = False
-                    
                     #########################################################################################################################
                     # log end of ripple and trigger trode
                     #########################################################################################################################
 
-        # must be a ripple onset message
-        else:
-            
+        else: # must be a ripple onset message
+
             ts = msg[0]['timestamp']
-            
+
             # ok to add ripple trodes
             if (
                 not self._is_in_multichannel_ripple and
-                ts > self._ripple_detect_ts + self._ripple_detect_ls
+                ts > self._ripple_event_ts + self._ripple_event_ls
             ):
 
                 trode = msg[0]['elec_grp_id']
@@ -132,24 +137,23 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     assert len(self._ripple_trodes) == self.p_ripples['num_above_thresh']
 
                     self._is_in_multichannel_ripple = True
-                    
+
                     #####################################################################################################################
                     # log ripple message - trigger trode, trodes contributing to ripple, timestamps, etc.
                     #####################################################################################################################
-                    self._ripple_detect_ts = ts
+                    self._ripple_event_ts = ts
 
                     send_shortcut_message = self._check_send_shortcut(
                         (
                             self.p_ripples['enabled'] and
-                            self.p_ripples['method'] == 'multichannel' and
-                            ts > self._ripple_stim_ts + self._ripple_stim_ls
+                            self.p_ripples['method'] == 'multichannel'
                         )
                     )
                     if send_shortcut_message:
+                        pass
                         #################################################################################################################
                         # send shortcut message
                         #################################################################################################################
-                        self._ripple_stim_ts = ts
 
     def _update_cons_ripple_status(self, msg):
 
@@ -162,28 +166,27 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         else: # must be start
 
             ts = msg[0]['timestamp']
-            if ts > self._cons_ripple_detect_ts + self._cons_ripple_detect_ls:
+            if ts > self._cons_ripple_event_ts + self._cons_ripple_event_ls:
 
                 #########################################################################################################################
                 # log ripple started
                 #########################################################################################################################
-                self._cons_ripple_detect_ts = ts
-                
+                self._cons_ripple_event_ts = ts
+
                 send_shortcut_message = self._check_send_shortcut(
                     (
                         self.p_ripples['enabled'] and
-                        self.p_ripples['method'] == 'consensus' and
-                        ts > self._cons_ripple_stim_ts + self._cons_ripple_stim_ls
+                        self.p_ripples['method'] == 'consensus'
                     )
                 )
                 if send_shortcut_message:
+                    pass
                     ####################################################################################################################
                     # send shortcut message
                     ###################################################################################################################
-                    self._cons_ripple_stim_ts = ts
 
     def _update_velocity_position(self, msg):
-        
+
         self._pos_msg_ct += 1
 
         self._current_pos = msg[0]['mapped_pos']
@@ -195,7 +198,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self.p['taskstate_file'] is not None and
             self._pos_msg_ct % self.p['num_pos_points'] == 0
         ):
-            self._task_state == utils.get_task_state(
+            self._task_state == utils.get_last_num(
                 self.p['taskstate_file']
             )
 
@@ -206,7 +209,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 'segment', msg[0]['segment'],
                 'raw_x', msg[0]['raw_x'], 'raw_y', msg[0]['raw_y'],
                 'angle', np.around(self._head_angle, decimals=2),
-                f'towell1 {self._angle_well_1:0.2f} towell2 {self._angle_well_2:0.2f}'
+                f'angle_well1 {self._angle_well_1:0.2f} ',
+                f'angle_well2 {self._angle_well_2:0.2f}'
             )
 
     def _update_head_direction(self, msg):
@@ -220,8 +224,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._angle_well_2 = angle_well_2
 
         N = len(self._angle_buffer)
-        self._angle_buffer[self._angle_buffer_ind % N] = self._head_angle
-        self._angle_buffer_ind += 1
+        self._angle_buffer[self._angle_buffer_ind] = self._head_angle
+        self._angle_buffer_ind = (self._angle_buffer_ind + 1) % N
 
         # not completely populated with real data yet
         if -1000 in self._angle_buffer:
@@ -236,17 +240,22 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         x = (msg[0]['raw_x'] + msg[0]['raw_x2'])/2
         y = (msg[0]['raw_y'] + msg[0]['raw_y2'])/2
-        dist = np.sqrt( 
+        dist = np.sqrt(
             (x - self._center_well_loc[0])**2 + (y - self._center_well_loc[1])**2
         ) * self.p['scale_factor']
-        
-        is_center_well_proximate = dist <= self.p['max_center_well_dist']
+
+        # this value is also used for replay event detection and describes
+        # whether the animal is CURRENTLY near the center well. to be accurate,
+        # it is important to minimize the decoder delay i.e.
+        # config['decoder']['time_bin']['delay_samples']
+        self._is_center_well_proximate = dist <= self.p['max_center_well_dist']
 
         ts = msg[0]['timestamp']
 
         if (
-            is_within_angle_range and is_center_well_proximate and
-            ts > self._head_stim_ts + self._head_stim_ls
+            is_within_angle_range and
+            self._is_center_well_proximate and
+            ts > self._head_event_ts + self._head_event_ls
         ):
 
             well = 0 # will this value ever be logged?
@@ -283,7 +292,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 print(
                     "Head direction event arm 2", angle,
                     np.around(ts/30000, decimals=2),
-                    "angle to target", angle_well_2                
+                    "angle to target", angle_well_2
                 )
                 well = 2
                 record = True
@@ -292,7 +301,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 )
 
             if record:
-                self._head_stim_ts = ts
+                self._head_event_ts = ts
                 ############################################################################################################
                 # record head stim message
                 #############################################################################################################
@@ -304,7 +313,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 ############################################################################################################
 
     def _compute_angles(self, msg):
-        
         x1 = msg[0]['raw_x']
         y1 = msg[0]['raw_y']
         x2 = msg[0]['raw_x2']
@@ -333,7 +341,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             np.arctan2(-(self._well_1_y - y), self._well_1_x - x)
         )
 
-        # 60 is arm 1    
+        # 60 is arm 1
         angle_well_2 = np.random.choice([70])
         angle_well_2 = 180 / np.pi * (
             np.arctan2(-(self._well_2_y - y), self._well_2_x - x)
@@ -342,81 +350,320 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         return head_angle, angle_well_1, angle_well_2
 
     def _update_posterior(self, msg):
-        
+
         ind = self._decoder_rank_ind_map[msg[0]['rank']]
-        target, offtarget, target_base, offtarget_base = self._compute_region_probs(
-            msg
-        )
 
-        ###################################################################################################
-        # shift in data, do a bunch of other computation
-        ###################################################################################################
+        self._update_spike_stats(ind, msg)
 
-    def _compute_region_probs(self, msg):
+        marginal_prob = self._update_decode_stats(ind, msg)
 
-        if self.p_replay['method'] == 'map':
-            prob = msg[0]['posterior'].sum(axis=0)
-        else: # use likelihood
-            prob = msg[0]['likelihood']
+        self._update_prob_sums(ind, marginal_prob)
 
         if self.p['instructive']:
-            target = prob[20:25].sum()
-            offtarget = prob[36:41].sum()
-            target_base = prob[13:18].sum()
-            offtarget_base = prob[29:34].sum()
+            self._find_replay_instructive(ind, msg)
+        else:
+            self._find_replay(ind, msg)
+
+        self._dd_ind = (self._dd_ind + 1) % self.p_replay['sliding_window']
+
+    def _update_spike_stats(self, ind, msg):
+
+        # add new spike counts
+        self._spike_count[ind] = msg[0]['spike_count']
+        self._event_spike_count[ind, self._dd_ind] = msg[0]['spike_count']
+
+        self._update_bin_firing_rate(ind, msg)
+
+    def _update_bin_firing_rate(self, ind, msg):
+
+        spike_rate = msg[0]['spike_count'] / self._dt
+        (self._bin_fr_means[ind],
+         self._bin_fr_M2[ind],
+         self._bin_fr_N[ind]
+        ) = utils.estimate_new_stats(
+            spike_rate,
+            self._bin_fr_means[ind],
+            self._bin_fr_M2[ind],
+            self._bin_fr_N[ind]
+        )
+        self._bin_fr_std[ind] = self._bin_fr_M2[ind] / self._bin_fr_N[ind]
+
+    def _update_decode_stats(self, ind, msg):
+
+        if self.p_replay['method'] == 'map':
+            marginal_prob = msg[0]['posterior'].sum(axis=0)
+            ci_decoder = msg[0]['cred_int_post']
+        else: # use likelihood
+            marginal_prob = msg[0]['likelihood']
+            ci_decoder = msg[0]['cred_int_lk']
+
+        decoder_argmax = np.argmax(marginal_prob)
+
+        # add new credible intervals and argmax of decoder
+        # probability
+        self._dec_ci_buff[ind, self._dd_ind] = ci_decoder
+        self._dec_argmax_buff[ind, self._dd_ind] = decoder_argmax
+
+        return marginal_prob
+
+    def _update_prob_sums(self, ind, marginal_prob):
+
+        arm_probs = self._compute_arm_probs(marginal_prob)
+        self._arm_ps_buff[ind, self._dd_ind] = arm_probs
+
+        ps_arm1, ps_arm2, ps_arm1_base, ps_arm2_base = self._compute_region_probs(
+            marginal_prob
+        )
+
+        # add new posterior/likelihood probability sums for desired regions
+        # perhaps we want to compute probability sum for box eventually?
+        self._region_ps_buff[ind, self._dd_ind, 0] = 0
+        self._region_ps_buff[ind, self._dd_ind, 1] = ps_arm1
+        self._region_ps_buff[ind, self._dd_ind, 2] = ps_arm2
+
+        self._region_ps_base_buff[ind, self._dd_ind, 0] = 0
+        self._region_ps_base_buff[ind, self._dd_ind, 1] = ps_arm1_base
+        self._region_ps_base_buff[ind, self._dd_ind, 2] = ps_arm2_base
+
+    def _compute_region_probs(self, prob):
+
+        ps_arm1 = prob[20:25].sum()
+        ps_arm2 = prob[36:41].sum()
+        ps_arm1_base = prob[13:18].sum()
+        ps_arm2_base = prob[29:34].sum()
+
+        return ps_arm1, ps_arm2, ps_arm1_base, ps_arm2_base
+
+    def _compute_arm_probs(self, prob):
+
+        arm_probs = np.zeros(len(self.p['arm_coords']))
+        for ii, (a, b) in enumerate(self.p['arm_coords']):
+            arm_probs[ii] = prob[a:b+1].sum()
+
+        return arm_probs
+
+    def _find_replay(self, ind, msg):
+
+        ts = msg[0]['bin_timestamp_r']
+
+        if ts <= self._replay_event_ts + self._replay_event_ls:
+            return
+
+        if self._num_decoders == 2:
+
+            primary_arm_thresh = self.p_replay['primary_arm_threshold']
+            secondary_arm_thresh = self.p_replay['secondary_arm_threshold']
+            other_arm_thresh = self.p_replay['other_arm_threshold']
+
+            avg_arm_ps_1 = np.mean(self._arm_ps_buff[0], axis=0)
+            avg_arm_ps_2 = np.mean(self._arm_ps_buff[1], axis=0)
+
+            # if at least one of the decoders crosses the primary
+            # threshold, then we determine which of them has the
+            # higher average arm probability sum. the decoder with
+            # the lower average arm probability sum has to cross
+            # the secondary threshold
+
+            # arm 1 candidate event
+            if (
+                avg_arm_ps_1[1] > primary_arm_thresh or
+                avg_arm_ps_2[1] > primary_arm_thresh
+            ):
+
+                if (
+                    avg_arm_ps_1[1] > avg_arm_ps_2[1] and
+                    avg_arm_ps_2[1] > secondary_arm_thresh and
+                    avg_arm_ps_1[2] < other_arm_thresh and # don't care about box/center well?
+                    avg_arm_ps_2[2] < other_arm_thresh # don't care about box/center well?
+                ):
+
+                    self._handle_replay(1, ts)
+
+                elif (
+                    avg_arm_ps_2[1] > avg_arm_ps_1[1] and
+                    avg_arm_ps_1[1] > secondary_arm_thresh and
+                    avg_arm_ps_1[2] < other_arm_thresh and # don't care about box/center well?
+                    avg_arm_ps_2[2] < other_arm_thresh # don't care about box/center well?
+                ):
+
+                    self._handle_replay(1, ts)
+
+            # arm 2 candidate event
+            elif (
+                avg_arm_ps_1[2] > primary_arm_thresh or
+                avg_arm_ps_2[2] > primary_arm_thresh
+            ):
+
+                if (
+                    avg_arm_ps_1[2] > avg_arm_ps_2[2] and
+                    avg_arm_ps_2[2] > secondary_arm_thresh and
+                    avg_arm_ps_1[1] < other_arm_thresh and # don't care about box/center well?
+                    avg_arm_ps_2[1] < other_arm_thresh # don't care about box/center well?
+                ):
+                    self._handle_replay(2, ts)
+
+                elif (
+                    avg_arm_ps_2[2] > avg_arm_ps_1[2] and
+                    avg_arm_ps_1[2] > secondary_arm_thresh and
+                    avg_arm_ps_1[1] < other_arm_thresh and # don't care about box/center well?
+                    avg_arm_ps_2[1] < other_arm_thresh # don't care about box/center well?
+                ):
+                    self._handle_replay(2, ts)
+
         else:
 
-            if self.p_replay['target_arm'] == 1:
-                target = prob[20:25].sum()
-                offtarget = prob[36:41].sum()
-                target_base = None
-                offtarget_base = None
-            else: # target arm is 2
-                target = prob[36:41].sum()
-                offtarget = prob[20:25].sum()
-                target_base = None
-                offtarget_base = None
+            arm_thresh = self.p_replay['primary_arm_threshold']
+            other_arm_thresh = self.p_replay['other_arm_threshold']
 
-        return target, offtarget, target_base, offtarget_base
+            avg_arm_ps = np.mean(self._arm_ps_buff[ind], axis=0)
+
+            # arm 1 candidate event
+            if (
+                avg_arm_ps[1] > arm_thresh and
+                np.all(avg_arm_ps[[0, 2]] < other_arm_thresh)
+            ):
+                self._handle_replay(1, ts)
+
+            # arm 2 candidate event
+            elif (
+                avg_arm_ps[2] > arm_thresh and
+                np.all(avg_arm_ps[[0, 1]] < other_arm_thresh)
+            ):
+                self._handle_replay(2, ts)
+
+    def _handle_replay(self, arm, ts):
+
+        # assumes already satisfied event lockout criterion.
+        # all these events should therefore be recorded
+
+        print(f"Replay arm {arm} detected")
+
+        self._replay_event_ts = ts
+
+        num_unique = np.count_nonzero(self._enc_ci_buff)
+
+        send_shortcut = self._check_send_shortcut(
+            self.p_replay['enabled'] and
+            num_unique > self.p_replay['min_unique_trodes'] and
+            arm == self.p_replay['target_arm'] and
+            self._is_center_well_proximate
+        )
+
+        if send_shortcut:
+            print(f"Replay arm {arm} rewarded")
+            self._trodes_client.send_statescript_shortcut_message(14)
+
+        # write record
+
+
+    def _find_replay_instructive(self, ind, msg):
+
+        ts = msg[0]['bin_timestamp_r']
+
+        if self._num_decoders == 2:
+            raise NotImplementedError(
+                "Finding instructive replay events is not implemented "
+                "for 2 decoders"
+            )
+        else:
+            # not out of lockout
+            if ts <= self._replay_event_ts + self._replay_event_ls:
+                return
+
+            arm_thresh = self.p_replay['primary_arm_threshold']
+            other_arm_thresh = self.p_replay['other_arm_threshold']
+
+            avg_region_ps = np.mean(self._region_ps_buff[ind], axis=0)
+            avg_region_ps_base = np.mean(self._region_ps_base_buff[ind], axis=0)
+            avg_arm_ps = np.mean(self._arm_ps_buff[ind], axis=0)
+
+            # arm 1 candidate event
+            if (
+                avg_region_ps[1] > arm_thresh and
+                avg_region_ps_base[1] > arm_thresh and
+                np.all(avg_arm_ps[[0, 2]] < other_arm_thresh)
+            ):
+                self._handle_replay_instructive(1, ts)
+
+            # arm 2 candidate event
+            elif (
+                avg_region_ps[2] > arm_thresh and
+                avg_region_ps_base[2] > arm_thresh and
+                np.all(avg_arm_ps[[0, 1]] < other_arm_thresh)
+            ):
+                self._handle_replay_instructive(2, ts)
+
+    def _handle_replay_instructive(self, arm, ts):
+
+        # assumes already satisfied event lockout criterion.
+        # all these events should therefore be recorded
+
+        print(f"INSTRUCTIVE: Replay arm {arm} detected")
+
+        self._replay_event_ts = ts
+
+        num_unique = np.count_nonzero(self._enc_ci_buff)
+        outer_arm_visited = utils.get_last_num(self.p['instructive_file'])
+
+        send_shortcut = self._check_send_shortcut(
+            self.p_replay['enabled'] and
+            outer_arm_visited and
+            num_unique > self.p_replay['min_unique_trodes'] and
+            arm == self.p_replay['target_arm'] and
+            self._is_center_well_proximate
+        )
+
+        if send_shortcut:
+            print(f"INSTRUCTIVE: Replay arm {arm} rewarded")
+            utils.write_text_file(self.p['instructive_file'], 0)
+            self._trodes_client.send_statescript_shortcut_message(14)
+            self._instr_rewards[1:] = self._instr_rewards[:-1]
+            self._instr_rewards[0] = arm
+            self._choose_next_target()
+
+        # write record
+
+    def _choose_next_target(self):
+
+        if np.all(self._instr_rewards == 1):
+            print('INSTRUCTIVE: switch to arm 2')
+            self.p_replay['target_arm'] = 2
+        elif np.all(self._instr_rewards == 2):
+            print('INSTRUCTIVE: switch to arm 1')
+            self.p_replay['target_arm'] = 1
+        else:
+            self.p_replay['target_arm'] = np.random.choice([1,2],1)[0]
 
     def _check_send_shortcut(self, other_condition):
 
         return self._task_state == 2 and other_condition
 
     def _init_stim_params(self):
-        
         # Convention
         # ts - timestamp
         # ls - lockout samples
 
-        self._replay_stim_ts = 0
-        self._replay_ls = int(
+        self._replay_event_ts = 0
+        self._replay_event_ls = int(
             self._config['sampling_rate']['spikes'] *
-            self._config['stimulation']['replay']['stim_lockout']
+            self._config['stimulation']['replay']['event_lockout']
         )
-        
-        self._ripple_detect_ts = 0
-        self._ripple_detect_ls = int(
+
+        self._ripple_event_ts = 0
+        self._ripple_event_ls = int(
             self._config['sampling_rate']['spikes'] *
-            self._config['stimulation']['ripples']['detect_lockout']
-        )
-        self._ripple_stim_ts = 0
-        self._ripple_stim_ls = int(
-            self._config['sampling_rate']['spikes'] *
-            self._config['stimulation']['ripples']['stim_lockout']
+            self._config['stimulation']['ripples']['event_lockout']
         )
 
         # Initial consensus ripple variables same as for multichannel
         # ripple variables
-        self._cons_ripple_detect_ts = self._ripple_detect_ts
-        self._cons_ripple_detect_ls = self._ripple_detect_ls
-        self._cons_ripple_stim_ts = self._ripple_stim_ts
-        self._cons_ripple_stim_ls = self._ripple_stim_ls
-        
-        self._head_stim_ts = 0
-        self._head_stim_ls = int(
+        self._cons_ripple_event_ts = self._ripple_event_ts
+        self._cons_ripple_event_ls = self._ripple_event_ls
+
+        self._head_event_ts = 0
+        self._head_event_ls = int(
             self._config['sampling_rate']['spikes'] *
-            self._config['stimulation']['head_direction']['stim_lockout']
+            self._config['stimulation']['head_direction']['event_lockout']
         )
 
     def _init_data_buffers(self):
@@ -437,6 +684,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._angle_buffer = np.ones(div) * -1000
         self._angle_buffer_ind = 0
 
+        # generate the lookup mapping
         self._decoder_rank_ind_map = {} # key: rank, value: index
         for ii, rank in enumerate(self._config['rank']['decoders']):
             self._decoder_rank_ind_map[rank] = ii
@@ -444,16 +692,39 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         N = self._config['stimulation']['replay']['sliding_window']
         num_trodes = self._config['decoder']['cred_int_bufsize']
         num_decoders = self._num_decoders
-        
-        # dim 1 is 3 because 3 regions - box, arm1, arm2
-        self._post_sum_buffers = [np.zeros((N, 3))] * num_decoders
-        self._cred_int_buffers = [np.zeros((N, num_trodes))] * num_decoders
-        self._lk_argmax_buffers = [np.zeros((N, num_trodes))] * num_decoders
+
+        self._dd_ind = 0 # shorthand for decode data
+
+        # dim 2 is 3 because 3 regions - box, arm1, arm2
+        # _ps_ - shorthand for probability sum
+        self._arm_ps_buff = np.zeros((num_decoders, N, 3))
+        self._region_ps_buff = np.zeros_like(self._arm_ps_buff)
+        self._region_ps_base_buff = np.zeros_like(self._arm_ps_buff)
+
+        self._dec_ci_buff = np.zeros((num_decoders, N))
+        self._dec_argmax_buff = np.zeros_like(self._dec_ci_buff)
+
+        self._enc_ci_buff = np.zeros((num_decoders, N, num_trodes))
+        self._enc_argmax_buff = np.zeros_like(self._enc_ci_buff)
+
+        # running stats of spiking rate
+        self._bin_fr_means = np.zeros(num_decoders)
+        self._bin_fr_M2 = np.zeros(num_decoders)
+        self._bin_fr_N = np.zeros(num_decoders)
+        self._bin_fr_std = np.zeros(num_decoders)
+        self._dt = (
+            self._config['decoder']['time_bin']['samples'] /
+            self._config['sampling_rate']['spikes']
+        )
+
+        self._spike_count = np.zeros(num_decoders)
+        self._event_spike_count = np.zeros((num_decoders, N))
 
     def _init_params(self):
 
         self.p = {}
-        self.p['taskstate_file'] = self._config.get('trodes').get('taskstate_file')
+        self.p['taskstate_file'] = self._config['trodes']['taskstate_file']
+        self.p['instructive_file'] = self._config['trodes']['instructive_file']
         self.p['scale_factor'] = self._config['kinematics']['scale_factor']
         self.p['instructive'] = self._config['stimulation']['instructive']
         # self.p['reward_mode'] = self._config['stimulation']['reward_mode']
@@ -461,6 +732,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p['num_pos_points'] = self._config['stimulation']['num_pos_points']
         self.p['num_pos_disp'] = self._config['display']['main']['position']
         self.p['max_center_well_dist'] = self._config['stimulation']['max_center_well_dist']
+        self.p['arm_coords'] = self._config['encoder']['position']['arm_coords']
 
         # verify some inputs
         replay_method = self._config['stimulation']['replay']['method']
@@ -473,13 +745,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         if ripple_method not in ('multichannel', 'consensus'):
             raise ValueError(
                 f"Invalid method {ripple_method} for ripples"
-            )
-        
-        detect_lo = self._config['stimulation']['ripples']['detect_lockout']
-        stim_lo = self._config['stimulation']['ripples']['stim_lockout']
-        if not (detect_lo <= stim_lo):
-            raise ValueError(
-                "'detect_lockout' must be <= 'stim_lockout'"
             )
 
         self.p_replay = {}
