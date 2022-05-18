@@ -75,7 +75,7 @@ class Encoder(base.LoggingClass):
         else:
             N = self._config['encoder']['bufsize']
             dim = self._config['encoder']['mark_dim']
-            self._marks = np.zeros((N, dim), dtype='<f4')
+            self._marks = np.zeros((N, dim), dtype='<f8')
             self._positions = np.zeros(N, dtype='<f4')
             self._mark_idx = 0
             self._occupancy = np.zeros(self._config['encoder']['position']['num_bins'])
@@ -299,7 +299,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._decoder_map = {} # map elec grp id to decoder rank
         self._times = {}
         self._times_ind = {}
-        
+
         self._task_state = 1
         self._not_task_1_ct = 0
 
@@ -462,7 +462,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
                     decoder_rank, False,
                     self.p['vel_thresh'], self.p['frozen_model'],
                     self._task_state, -1,
-                    *mark_vec, *np.zeros(self.p['num_bins'])         
+                    *mark_vec, *np.zeros(self.p['num_bins'])
                 )
 
             # now that we've estimated the spike/pos joint probability,
@@ -559,7 +559,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         return amp_mark
 
     def _is_training_epoch(self):
-        
+
         res = (
             abs(self._current_vel) >= self.p['vel_thresh'] and
             self._task_state == 1 and
@@ -614,7 +614,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         for trode in trodes:
             self._spikes_interface.register_datatype_channel(trode)
-            
+
             self._encoders[trode] = Encoder(
                 self._config,
                 trode,
@@ -624,7 +624,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
                     self._config['encoder']['position']['num_bins']
                 )
             )
-            
+
             self._spk_counters[trode] = {}
             self._spk_counters[trode]['total'] = 0
             self._spk_counters[trode]['encoding'] = 0
