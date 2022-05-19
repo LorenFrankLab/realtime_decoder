@@ -31,7 +31,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             len(self._config['encoder']['position']['arm_coords']),
             dtype='=i4'
         )
-        self._instr_rewards = np.zeros(
+        self._instr_rewarded_arms = np.zeros(
             self._config['stimulation']['replay']['instr_max_repeats'],
             dtype='=i4'
         )
@@ -638,8 +638,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             print(f"INSTRUCTIVE: Replay arm {arm} rewarded")
             utils.write_text_file(self.p['instructive_file'], 0)
             self._trodes_client.send_statescript_shortcut_message(14)
-            self._instr_rewards[1:] = self._instr_rewards[:-1]
-            self._instr_rewards[0] = arm
+            self._instr_rewarded_arms[1:] = self._instr_rewarded_arms[:-1]
+            self._instr_rewarded_arms[0] = arm
             self._choose_next_instructive_target()
 
         ##############################################################################################
@@ -648,10 +648,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def _choose_next_instructive_target(self):
 
-        if np.all(self._instr_rewards == 1):
+        if np.all(self._instr_rewarded_arms == 1):
             print('INSTRUCTIVE: switch to arm 2')
             self.p_replay['target_arm'] = 2
-        elif np.all(self._instr_rewards == 2):
+        elif np.all(self._instr_rewarded_arms == 2):
             print('INSTRUCTIVE: switch to arm 1')
             self.p_replay['target_arm'] = 1
         else:
