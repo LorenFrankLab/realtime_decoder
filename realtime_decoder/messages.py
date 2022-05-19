@@ -148,6 +148,7 @@ class GuiMainParameters(PrintableClass):
         min_duration:float=None,
         well_angle_range:float=None,
         within_angle_range:float=None,
+        rotate_180:bool=None,
         replay_stim_enabled:bool=None,
         ripple_stim_enabled:bool=None,
         head_direction_stim_enabled:bool=None
@@ -160,6 +161,7 @@ class GuiMainParameters(PrintableClass):
         self.min_duration = min_duration
         self.well_angle_range = well_angle_range
         self.within_angle_range = within_angle_range
+        self.rotate_180 = rotate_180
         self.replay_stim_enabled = replay_stim_enabled
         self.ripple_stim_enabled = ripple_stim_enabled
         self.head_direction_stim_enabled = head_direction_stim_enabled

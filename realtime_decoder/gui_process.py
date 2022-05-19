@@ -190,6 +190,7 @@ class TabbedDialog(QDialog):
         self._setup_min_duration(layout)
         self._setup_well_angle_range(layout)
         self._setup_within_angle_range(layout)
+        self._setup_rotate_180(layout)
         self._setup_replay_stim(layout)
         self._setup_ripple_stim(layout)
         self._setup_head_direction_stim(layout)
@@ -207,7 +208,7 @@ class TabbedDialog(QDialog):
 
     def _setup_target_arm(self, layout):
 
-        self._target_arm_label = QLabel(self.tr("Replay Target Arm"))
+        self._target_arm_label = QLabel(self.tr("Replay target arm"))
         layout.addWidget(self._target_arm_label, 2, 0)
 
         self._target_arm_edit = QLineEdit()
@@ -229,7 +230,7 @@ class TabbedDialog(QDialog):
         self._main_params.replay_target_arm = arm
 
     def _setup_post_thresh(self, layout):
-        self._post_label = QLabel(self.tr("Posterior Threshold"))
+        self._post_label = QLabel(self.tr("Posterior threshold"))
         self._post_label.setToolTip("Just a helpful tool tip")
         layout.addWidget(self._post_label, 3, 0)
 
@@ -247,7 +248,7 @@ class TabbedDialog(QDialog):
         self._main_params.posterior_threshold = value
 
     def _setup_max_center_well_distance(self, layout):
-        self._max_center_well_label = QLabel(self.tr("Max Center Well Distance"))
+        self._max_center_well_label = QLabel(self.tr("Max center well distance"))
         layout.addWidget(self._max_center_well_label, 4, 0)
 
         self._max_center_well_edit = QLineEdit()
@@ -262,7 +263,7 @@ class TabbedDialog(QDialog):
         self._main_params.max_center_well_distance = value
 
     def _setup_num_above_thresh(self, layout):
-        self._num_above_label = QLabel(self.tr("Num. Trodes Above Threshold"))
+        self._num_above_label = QLabel(self.tr("Num. trodes above threshold"))
         layout.addWidget(self._num_above_label, 5, 0)
 
         self._num_above_edit = QLineEdit()
@@ -327,9 +328,33 @@ class TabbedDialog(QDialog):
         self._within_angle_range_edit.setText(str(value))
         self._main_params.within_angle_range = value
 
+    def _setup_rotate_180(self, layout):
+        self._rotate_180_label = QLabel(self.tr("Rotate head vector 180"))
+        layout.addWidget(self._rotate_180_label, 9, 0)
+
+        self._rotate_180_yes = QRadioButton(self.tr("YES"))
+        self._rotate_180_no = QRadioButton(self.tr("NO"))
+        rotate_180_layout = QHBoxLayout()
+        rotate_180_layout.addWidget(self._rotate_180_yes)
+        rotate_180_layout.addWidget(self._rotate_180_no)
+        rotate_180_group_box = QGroupBox()
+        rotate_180_group_box.setLayout(rotate_180_layout)
+        layout.addWidget(rotate_180_group_box, 9, 1)
+
+        self._rotate_180_button = QPushButton(self.tr("Update"))
+        self._rotate_180_button.pressed.connect(self._check_rotate_180)
+        layout.addWidget(self._rotate_180_button, 9, 2)
+
+        if self._config['stimulation']['head_direction']['rotate_180']:
+            self._rotate_180_yes.setChecked(True)
+            self._main_params.rotate_180 = True
+        else:
+            self._rotate_180_no.setChecked(True)
+            self._main_params.rotate_180 = False
+
     def _setup_replay_stim(self, layout):
-        self._replay_stim_label = QLabel(self.tr("Replay Stim"))
-        layout.addWidget(self._replay_stim_label, 9, 0)
+        self._replay_stim_label = QLabel(self.tr("Replay stim"))
+        layout.addWidget(self._replay_stim_label, 10, 0)
 
         self._replay_stim_on = QRadioButton(self.tr("ON"))
         self._replay_stim_off = QRadioButton(self.tr("OFF"))
@@ -338,11 +363,11 @@ class TabbedDialog(QDialog):
         replay_layout.addWidget(self._replay_stim_off)
         replay_group_box = QGroupBox()
         replay_group_box.setLayout(replay_layout)
-        layout.addWidget(replay_group_box, 9, 1)
+        layout.addWidget(replay_group_box, 10, 1)
 
         self._replay_stim_button = QPushButton(self.tr("Update"))
         self._replay_stim_button.pressed.connect(self._check_replay_stim)
-        layout.addWidget(self._replay_stim_button, 9, 2)
+        layout.addWidget(self._replay_stim_button, 10, 2)
 
         if self._config['stimulation']['replay']['enabled']:
             self._replay_stim_on.setChecked(True)
@@ -352,8 +377,8 @@ class TabbedDialog(QDialog):
             self._main_params.replay_stim_enabled = False
 
     def _setup_ripple_stim(self, layout):
-        self._ripple_stim_label = QLabel(self.tr("Ripple Stim"))
-        layout.addWidget(self._ripple_stim_label, 10, 0)
+        self._ripple_stim_label = QLabel(self.tr("Ripple stim"))
+        layout.addWidget(self._ripple_stim_label, 11, 0)
 
         self._ripple_stim_on = QRadioButton(self.tr("ON"))
         self._ripple_stim_off = QRadioButton(self.tr("OFF"))
@@ -362,11 +387,11 @@ class TabbedDialog(QDialog):
         ripple_layout.addWidget(self._ripple_stim_off)
         ripple_group_box = QGroupBox()
         ripple_group_box.setLayout(ripple_layout)
-        layout.addWidget(ripple_group_box, 10, 1)
+        layout.addWidget(ripple_group_box, 11, 1)
 
         self._ripple_stim_button = QPushButton(self.tr("Update"))
         self._ripple_stim_button.pressed.connect(self._check_ripple_stim)
-        layout.addWidget(self._ripple_stim_button, 10, 2)
+        layout.addWidget(self._ripple_stim_button, 11, 2)
 
         if self._config['stimulation']['ripples']['enabled']:
             self._ripple_stim_on.setChecked(True)
@@ -376,8 +401,8 @@ class TabbedDialog(QDialog):
             self._main_params.ripple_stim_enabled = False
 
     def _setup_head_direction_stim(self, layout):
-        self._hdir_stim_label = QLabel(self.tr("Head Direction Stim"))
-        layout.addWidget(self._hdir_stim_label, 11, 0)
+        self._hdir_stim_label = QLabel(self.tr("Head direction stim"))
+        layout.addWidget(self._hdir_stim_label, 12, 0)
 
         self._hdir_stim_on = QRadioButton(self.tr("ON"))
         self._hdir_stim_off = QRadioButton(self.tr("OFF"))
@@ -386,11 +411,11 @@ class TabbedDialog(QDialog):
         hdir_layout.addWidget(self._hdir_stim_off)
         hdir_group_box = QGroupBox()
         hdir_group_box.setLayout(hdir_layout)
-        layout.addWidget(hdir_group_box, 11, 1)
+        layout.addWidget(hdir_group_box, 12, 1)
 
         self._hdir_stim_button = QPushButton(self.tr("Update"))
         self._hdir_stim_button.pressed.connect(self._check_hdir_stim)
-        layout.addWidget(self._hdir_stim_button, 11, 2)
+        layout.addWidget(self._hdir_stim_button, 12, 2)
 
         if self._config['stimulation']['head_direction']['enabled']:
             self._hdir_stim_on.setChecked(True)
@@ -402,7 +427,7 @@ class TabbedDialog(QDialog):
     def _setup_ripple_params(self, layout):
         self._ripple_label = QLabel(self.tr("Ripple"))
         self._ripple_label.setStyleSheet("font-weight: bold")
-        layout.addWidget(self._ripple_label, 12, 0)
+        layout.addWidget(self._ripple_label, 13, 0)
 
         self._setup_ripple_detect_vel(layout)
         self._setup_rip_thresh(layout)
@@ -411,30 +436,30 @@ class TabbedDialog(QDialog):
         self._setup_end_rip_thresh(layout)
 
     def _setup_ripple_detect_vel(self, layout):
-        self._ripple_vel_thresh_label = QLabel(self.tr("Ripple Velocity Threshold"))
-        layout.addWidget(self._ripple_vel_thresh_label, 13, 0)
+        self._ripple_vel_thresh_label = QLabel(self.tr("Ripple velocity threshold"))
+        layout.addWidget(self._ripple_vel_thresh_label, 14, 0)
 
         self._ripple_vel_thresh_edit = QLineEdit()
-        layout.addWidget(self._ripple_vel_thresh_edit, 13, 1)
+        layout.addWidget(self._ripple_vel_thresh_edit, 14, 1)
 
         self._ripple_vel_thresh_button = QPushButton(self.tr("Update"))
         self._ripple_vel_thresh_button.pressed.connect(self._check_ripple_vel_thresh)
-        layout.addWidget(self._ripple_vel_thresh_button, 13, 2)
+        layout.addWidget(self._ripple_vel_thresh_button, 14, 2)
 
         value = float(self._config['ripples']['vel_thresh'])
         self._ripple_vel_thresh_edit.setText(str(value))
         self._ripple_params.velocity_threshold = value
 
     def _setup_rip_thresh(self, layout):
-        self._rip_thresh_label = QLabel(self.tr("Ripple Threshold"))
-        layout.addWidget(self._rip_thresh_label, 14, 0)
+        self._rip_thresh_label = QLabel(self.tr("Ripple threshold"))
+        layout.addWidget(self._rip_thresh_label, 15, 0)
 
         self._rip_thresh_edit = QLineEdit()
-        layout.addWidget(self._rip_thresh_edit, 14, 1)
+        layout.addWidget(self._rip_thresh_edit, 15, 1)
 
         self._rip_thresh_button = QPushButton(self.tr("Update"))
         self._rip_thresh_button.pressed.connect(self._check_rip_thresh)
-        layout.addWidget(self._rip_thresh_button, 14, 2)
+        layout.addWidget(self._rip_thresh_button, 15, 2)
 
         value = float(self._config['ripples']['threshold']['standard'])
         self._rip_thresh_edit.setText(str(value))
@@ -442,18 +467,18 @@ class TabbedDialog(QDialog):
 
     def _setup_cond_rip_thresh(self, layout):
         self._cond_rip_thresh_label = QLabel(
-            self.tr("Conditioning Ripple Threshold")
+            self.tr("Conditioning ripple threshold")
         )
-        layout.addWidget(self._cond_rip_thresh_label, 15, 0)
+        layout.addWidget(self._cond_rip_thresh_label, 16, 0)
 
         self._cond_rip_thresh_edit = QLineEdit()
-        layout.addWidget(self._cond_rip_thresh_edit, 15, 1)
+        layout.addWidget(self._cond_rip_thresh_edit, 16, 1)
 
         self._cond_rip_thresh_button = QPushButton(self.tr("Update"))
         self._cond_rip_thresh_button.pressed.connect(
             self._check_cond_rip_thresh
         )
-        layout.addWidget(self._cond_rip_thresh_button, 15, 2)
+        layout.addWidget(self._cond_rip_thresh_button, 16, 2)
 
         value = float(self._config['ripples']['threshold']['conditioning'])
         self._cond_rip_thresh_edit.setText(str(value))
@@ -461,18 +486,18 @@ class TabbedDialog(QDialog):
 
     def _setup_content_rip_thresh(self, layout):
         self._content_rip_thresh_label = QLabel(
-            self.tr("Content Ripple Threshold")
+            self.tr("Content ripple threshold")
         )
-        layout.addWidget(self._content_rip_thresh_label, 16, 0)
+        layout.addWidget(self._content_rip_thresh_label, 17, 0)
 
         self._content_rip_thresh_edit = QLineEdit()
-        layout.addWidget(self._content_rip_thresh_edit, 16, 1)
+        layout.addWidget(self._content_rip_thresh_edit, 17, 1)
 
         self._content_rip_thresh_button = QPushButton(self.tr("Update"))
         self._content_rip_thresh_button.pressed.connect(
             self._check_content_rip_thresh
         )
-        layout.addWidget(self._content_rip_thresh_button, 16, 2)
+        layout.addWidget(self._content_rip_thresh_button, 17, 2)
 
         value = float(self._config['ripples']['threshold']['content'])
         self._content_rip_thresh_edit.setText(str(value))
@@ -480,18 +505,18 @@ class TabbedDialog(QDialog):
 
     def _setup_end_rip_thresh(self, layout):
         self._end_rip_thresh_label = QLabel(
-            self.tr("End of Ripple Threshold")
+            self.tr("End of ripple threshold")
         )
-        layout.addWidget(self._end_rip_thresh_label, 17, 0)
+        layout.addWidget(self._end_rip_thresh_label, 18, 0)
 
         self._end_rip_thresh_edit = QLineEdit()
-        layout.addWidget(self._end_rip_thresh_edit, 17, 1)
+        layout.addWidget(self._end_rip_thresh_edit, 18, 1)
 
         self._end_rip_thresh_button = QPushButton(self.tr("Update"))
         self._end_rip_thresh_button.pressed.connect(
             self._check_end_rip_thresh
         )
-        layout.addWidget(self._end_rip_thresh_button, 17, 2)
+        layout.addWidget(self._end_rip_thresh_button, 18, 2)
 
         value = float(self._config['ripples']['threshold']['end'])
         self._end_rip_thresh_edit.setText(str(value))
@@ -500,20 +525,20 @@ class TabbedDialog(QDialog):
     def _setup_model_params(self, layout):
         self._model_label = QLabel(self.tr("Encoding Model"))
         self._model_label.setStyleSheet("font-weight: bold")
-        layout.addWidget(self._model_label, 18, 0)
+        layout.addWidget(self._model_label, 19, 0)
 
         self._setup_encoding_model_vel(layout)
 
     def _setup_encoding_model_vel(self, layout):
-        self._encoding_vel_thresh_label = QLabel(self.tr("Encoding Velocity Threshold"))
-        layout.addWidget(self._encoding_vel_thresh_label, 19, 0)
+        self._encoding_vel_thresh_label = QLabel(self.tr("Encoding velocity threshold"))
+        layout.addWidget(self._encoding_vel_thresh_label, 20, 0)
 
         self._encoding_vel_thresh_edit = QLineEdit()
-        layout.addWidget(self._encoding_vel_thresh_edit, 19, 1)
+        layout.addWidget(self._encoding_vel_thresh_edit, 20, 1)
 
         self._encoding_vel_thresh_button = QPushButton(self.tr("Update"))
         self._encoding_vel_thresh_button.pressed.connect(self._check_encoding_vel_thresh)
-        layout.addWidget(self._encoding_vel_thresh_button, 19, 2)
+        layout.addWidget(self._encoding_vel_thresh_button, 20, 2)
 
         value = float(self._config['encoder']['vel_thresh'])
         self._encoding_vel_thresh_edit.setText(str(value))
@@ -796,22 +821,22 @@ class TabbedDialog(QDialog):
                 kind='critical'
             )
 
-    def _check_shortcut(self):
-        shortcut_on_checked = self._shortcut_on.isChecked()
+    def _check_rotate_180(self):
+        rotate_180 = self._rotate_180_yes.isChecked()
         try:
-            if shortcut_on_checked:
-                self._main_params.shortcut_message_on = True
+            if rotate_180:
+                self._main_params.rotate_180 = True
                 self._send_main_params()
                 _show_message(
                     self,
-                    "Message sent - Set shortcut ON",
+                    "Message sent - Rotate 180 ON",
                     kind="information")
             else:
-                self._main_params.shortcut_message_on = False
+                self._main_params.rotate_180 = False
                 self._send_main_params()
                 _show_message(
                     self,
-                    "Message sent - Set shortcut OFF",
+                    "Message sent - Rotate 180 OFF",
                     kind="information")
         except Exception as e:
             _show_message(

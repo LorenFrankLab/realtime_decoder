@@ -47,7 +47,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._ripple_timestamps = {
             rtype: [] for rtype in ripple_types
         }
-        self._is_in_multichannel_ripple {
+        self._is_in_multichannel_ripple = {
             rtype: False for rtype in ripple_types
         }
 
@@ -104,6 +104,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p_head['min_duration'] = gui_msg.min_duration
         self.p_head['well_angle_range'] = gui_msg.well_angle_range
         self.p_head['within_angle_range'] = gui_msg.within_angle_range
+        self.p_head['rotate_180'] = gui_msg.rotate_180
         self.p_replay['enabled'] = gui_msg.replay_stim_enabled
         self.p_ripples['enabled'] = gui_msg.ripple_stim_enabled
         self.p_head['enabled'] = gui_msg.head_direction_stim_enabled
