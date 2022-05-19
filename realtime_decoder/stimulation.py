@@ -40,9 +40,16 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._current_pos = 0
         self._current_vel = 0
 
-        self._ripple_trodes = []
-        self._ripple_timestamps = []
-        self._is_in_multichannel_ripple = False
+        ripple_types = ('standard', 'cond', 'content')
+        self._ripple_trodes = {
+            rtype: [] for rtype in ripple_types
+        }
+        self._ripple_timestamps = {
+            rtype: [] for rtype in ripple_types
+        }
+        self._is_in_multichannel_ripple {
+            rtype: False for rtype in ripple_types
+        }
 
         self._center_well_loc = self._config['stimulation']['center_well_loc']
         well_loc = self._config['stimulation']['head_direction']['well_loc']
@@ -103,68 +110,69 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def _update_ripples(self, msg):
 
-        if (
-            not msg[0]['is_consensus'] and
-            self.p_ripples['type'] == msg[0]['ripple_type']
-
-        ):
-            self._update_ripple_status(msg)
-        elif (
-            msg[0]['is_consensus'] and
-            self.p_ripples['type'] == msg[0]['ripple_type']
-        ):
+        if msg[0]['is_consensus']:
             self._update_cons_ripple_status(msg)
-
-        # else: ignore data that doesn't match ripple type
-        # we're interested in
+        else:
+            self._update_ripple_status(msg)
 
     def _update_ripple_status(self, msg):
 
         if msg[0]['ripple_type'] == 'end':
             trode = msg[0]['elec_grp_id']
-            if self._is_in_multichannel_ripple and trode in self._ripple_trodes:
 
-                self._ripple_trodes.remove(trode)
+            # an 'end' ripple_type marks the end for standard, content, and
+            # conditioning ripples (they are synchronized). so we need to
+            # check all keys in the dictionary
+            for rtype in self._is_in_multichannel_ripple:
 
-                # all ripple trodes that triggered ripple start have
-                # finished their ripples
-                if self._ripple_trodes == []:
+                if (
+                    self._is_in_multichannel_ripple[rtype] and
+                    trode in self._ripple_trodes[rtype]
+                ):
 
-                    self._ripple_timestamps = [] # reset vector of timestamps
-                    self._is_in_multichannel_ripple = False
-                    #########################################################################################################################
-                    # log end of ripple and trigger trode
-                    #########################################################################################################################
+                    self._ripple_trodes[rtype].remove(trode)
+
+                    # all ripple trodes that triggered ripple start have
+                    # finished their ripples
+                    if self._ripple_trodes[rtype] == []:
+
+                        self._ripple_timestamps[rtype] = [] # reset vector of timestamps
+                        self._is_in_multichannel_ripple[rtype] = False
+                        #######################################################################################
+                        # log end of ripple, trigger trode, rtype
+                        #######################################################################################
 
         else: # must be a ripple onset message
 
             ts = msg[0]['timestamp']
+            rtype = msg[0]['ripple_type']
 
             # ok to add ripple trodes
             if (
-                not self._is_in_multichannel_ripple and
-                ts > self._ripple_event_ts + self._ripple_event_ls
+                not self._is_in_multichannel_ripple[rtype] and
+                ts > self._ripple_event_ts[rtype] + self._ripple_event_ls
             ):
 
                 trode = msg[0]['elec_grp_id']
-                self._ripple_trodes.append(trode)
-                self._ripple_timestamps.append(ts)
+                self._ripple_trodes[rtype].append(trode)
+                self._ripple_timestamps[rtype].append(ts)
 
                 # now check if number of ripple trodes exceeds minimum
-                if len(self._ripple_trodes) >= self.p_ripples['num_above_thresh']:
+                if len(self._ripple_trodes[rtype]) >= self.p_ripples['num_above_thresh']:
 
-                    assert len(self._ripple_trodes) == self.p_ripples['num_above_thresh']
+                    assert len(self._ripple_trodes[rtype]) == self.p_ripples['num_above_thresh']
 
-                    self._is_in_multichannel_ripple = True
+                    self._is_in_multichannel_ripple[rtype] = True
 
                     #####################################################################################################################
                     # log ripple message - trigger trode, trodes contributing to ripple, timestamps, etc.
                     #####################################################################################################################
-                    self._ripple_event_ts = ts
+                    self._ripple_event_ts[rtype] = ts
 
                     send_shortcut_message = self._check_send_shortcut(
                         (
                             self.p_ripples['enabled'] and
+                            self.p_ripples['type'] == rtype and
                             self.p_ripples['method'] == 'multichannel'
                         )
                     )
@@ -185,16 +193,18 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         else: # must be start
 
             ts = msg[0]['timestamp']
-            if ts > self._cons_ripple_event_ts + self._cons_ripple_event_ls:
+            rtype = msg[0]['ripple_type']
+            if ts > self._cons_ripple_event_ts[rtype] + self._cons_ripple_event_ls:
 
                 #########################################################################################################################
                 # log ripple started
                 #########################################################################################################################
-                self._cons_ripple_event_ts = ts
+                self._cons_ripple_event_ts[rtype] = ts
 
                 send_shortcut_message = self._check_send_shortcut(
                     (
                         self.p_ripples['enabled'] and
+                        self.p_ripples['type'] == rtype and
                         self.p_ripples['method'] == 'consensus'
                     )
                 )
@@ -673,7 +683,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self._config['stimulation']['replay']['event_lockout']
         )
 
-        self._ripple_event_ts = 0
+        ripple_types = ('standard', 'cond', 'content')
+        self._ripple_event_ts = {
+            rtype: 0 for rtype in ripple_types
+        }
         self._ripple_event_ls = int(
             self._config['sampling_rate']['spikes'] *
             self._config['stimulation']['ripples']['event_lockout']
@@ -681,7 +694,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         # Initial consensus ripple variables same as for multichannel
         # ripple variables
-        self._cons_ripple_event_ts = self._ripple_event_ts
+        self._cons_ripple_event_ts = {
+            rtype: 0 for rtype in ripple_types
+        }
         self._cons_ripple_event_ls = self._ripple_event_ls
 
         self._head_event_ts = 0
