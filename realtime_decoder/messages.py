@@ -7,7 +7,7 @@ from typing import Sequence, Dict
 class MPIMessageTag(IntEnum):
     """Tags for messages passed between MPI processes
     """
-    
+
     COMMAND_MESSAGE = 1
     FEEDBACK_DATA = 2
     TIMING_MESSAGE = 3
@@ -34,7 +34,7 @@ class MPIMessageTag(IntEnum):
 class PrintableClass(object):
     """Contains repr to print out object so its attributes can be seen easily
     """
-    
+
     def __repr__(self):
         return f'<{self.__class__.__name__} at {hex(id(self))}>: {self.__dict__}'
 
@@ -43,7 +43,7 @@ class BinaryRecordCreate(PrintableClass):
     of relevant information that will be used for writing binary
     records
     """
-    
+
     def __init__(self, manager_label, file_id, save_dir, file_prefix,
         file_postfix, rec_label_dict, rec_format_dict, num_digits):
 
@@ -61,7 +61,7 @@ class BinaryRecordType(PrintableClass):
     """A class containing relevant information for a particular
     binary record type
     """
-    
+
     def __init__(self, manager_label, rec_id, rec_labels, rec_struct_fmt):
         self.manager_label = manager_label
         self.rec_id = rec_id
@@ -72,7 +72,7 @@ class BinaryRecordSendComplete(PrintableClass):
     """Signifies to the main process that all binary record
     registration messages have been sent
     """
-    
+
     def __init__(self):
         pass
 
@@ -84,7 +84,7 @@ class TrodeSelection(PrintableClass):
     trodes : Sequence of type int
         The trodes that will be managed
     """
-    
+
     def __init__(self, trodes:Sequence[int]):
         self.trodes = trodes
 
@@ -98,7 +98,7 @@ class StartRecordMessage(PrintableClass):
 class ActivateDataStreams(PrintableClass):
     """Message used to tell data sources to be activated
     """
-    
+
     def __init__(self):
         pass
 
@@ -112,14 +112,14 @@ class StartupSignal(PrintableClass):
 class TerminateSignal(PrintableClass):
     """Communicates that a process should be terminated
     """
-    
+
     def __init__(self):
         pass
 
 class SetupComplete(PrintableClass):
     """Communicates that setup is complete for all processes
     """
-    
+
     def __init__(self, *, data=None):
         self.data = data
 
@@ -139,28 +139,40 @@ class VerifyStillAlive(PrintableClass):
         pass
 
 class GuiMainParameters(PrintableClass):
-    
+
     def __init__(
-        self, posterior_threshold:float, max_center_well_distance:float,
-        num_above_threshold:int, min_duration:float, well_angle_range:float,
-        within_angle_range:float, shortcut_message_on:bool
+        self, *, replay_target_arm:int=None,
+        posterior_threshold:float=None,
+        max_center_well_distance:float=None,
+        num_above_threshold:int=None,
+        min_duration:float=None,
+        well_angle_range:float=None,
+        within_angle_range:float=None,
+        replay_stim_enabled:bool=None,
+        ripple_stim_enabled:bool=None,
+        head_direction_stim_enabled:bool=None
     ):
 
+        self.replay_target_arm = replay_target_arm
         self.posterior_threshold = posterior_threshold
         self.max_center_well_distance = max_center_well_distance
         self.num_above_threshold = num_above_threshold
         self.min_duration = min_duration
         self.well_angle_range = well_angle_range
         self.within_angle_range = within_angle_range
-        self.shortcut_message_on = shortcut_message_on
+        self.replay_stim_enabled = replay_stim_enabled
+        self.ripple_stim_enabled = ripple_stim_enabled
+        self.head_direction_stim_enabled = head_direction_stim_enabled
 
 class GuiRippleParameters(PrintableClass):
-    
+
     def __init__(
-        self, velocity_threshold:float, ripple_threshold:float,
-        conditioning_ripple_threshold:float,
-        content_ripple_threshold:float, end_ripple_threshold:float,
-        freeze_stats:bool
+        self, *, velocity_threshold:float=None,
+        ripple_threshold:float=None,
+        conditioning_ripple_threshold:float=None,
+        content_ripple_threshold:float=None,
+        end_ripple_threshold:float=None,
+        freeze_stats:bool=None
     ):
         self.velocity_threshold = velocity_threshold
         self.ripple_threshold = ripple_threshold
@@ -170,8 +182,11 @@ class GuiRippleParameters(PrintableClass):
         self.freeze_stats = freeze_stats
 
 class GuiEncodingModelParameters(PrintableClass):
-    
-    def __init__(self, encoding_velocity_threshold:float, freeze_model:bool):
+
+    def __init__(
+        self, *, encoding_velocity_threshold:float=None,
+        freeze_model:bool=None
+    ):
         self.encoding_velocity_threshold = encoding_velocity_threshold
         self.freeze_model = freeze_model
 
@@ -180,7 +195,7 @@ def get_dtype(msg_type:str, *, config:Dict={}):
 
     # Note: there might be an issue if we're passing data
     # between machines with different native byte order
-    
+
     if msg_type == "Ripples":
         dt = np.dtype([
             ('timestamp', '=i8'),

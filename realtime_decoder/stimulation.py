@@ -29,11 +29,11 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._task_state = 1
         self._num_rewards = np.zeros(
             len(self._config['encoder']['position']['arm_coords']),
-            dtype=int
+            dtype='=i4'
         )
         self._instr_rewards = np.zeros(
             self._config['stimulation']['replay']['instr_max_repeats'],
-            dtype=int
+            dtype='=i4'
         )
 
         self._pos_msg_ct = 0
@@ -81,6 +81,25 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def _update_gui_params(self, gui_msg):
         self.class_log.info("Updating GUI main parameters")
+
+        # manual control of the replay target arm is only allowed
+        # for a non-instructive task
+        if not self._config['stimulation']['instructive']:
+            arm = gui_msg.replay_target_arm
+            self.p_replay['target_arm'] = arm
+            self.class_log.info(
+                "Non instructive task: Updated replay target arm to {arm}"
+            )
+
+        self.p_replay['primary_arm_threshold'] = gui_msg.posterior_threshold
+        self.p['max_center_well_dist'] = gui_msg.max_center_well_distance
+        self.p_ripples['num_above_thresh'] = gui_msg.num_above_threshold
+        self.p_head['min_duration'] = gui_msg.min_duration
+        self.p_head['well_angle_range'] = gui_msg.well_angle_range
+        self.p_head['within_angle_range'] = gui_msg.within_angle_range
+        self.p_replay['enabled'] = gui_msg.replay_stim_enabled
+        self.p_ripples['enabled'] = gui_msg.ripple_stim_enabled
+        self.p_head['enabled'] = gui_msg.head_direction_stim_enabled
 
     def _update_ripples(self, msg):
 
@@ -473,8 +492,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 if (
                     avg_arm_ps_1[1] > avg_arm_ps_2[1] and
                     avg_arm_ps_2[1] > secondary_arm_thresh and
-                    avg_arm_ps_1[2] < other_arm_thresh and # don't care about box/center well?
-                    avg_arm_ps_2[2] < other_arm_thresh # don't care about box/center well?
+                    np.all(avg_arm_ps_1[[0, 2]] < other_arm_thresh) and
+                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh)
                 ):
 
                     self._handle_replay(1, ts)
@@ -482,8 +501,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 elif (
                     avg_arm_ps_2[1] > avg_arm_ps_1[1] and
                     avg_arm_ps_1[1] > secondary_arm_thresh and
-                    avg_arm_ps_1[2] < other_arm_thresh and # don't care about box/center well?
-                    avg_arm_ps_2[2] < other_arm_thresh # don't care about box/center well?
+                    np.all(avg_arm_ps_1[[0, 2]] < other_arm_thresh) and
+                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh)
                 ):
 
                     self._handle_replay(1, ts)
@@ -497,16 +516,16 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 if (
                     avg_arm_ps_1[2] > avg_arm_ps_2[2] and
                     avg_arm_ps_2[2] > secondary_arm_thresh and
-                    avg_arm_ps_1[1] < other_arm_thresh and # don't care about box/center well?
-                    avg_arm_ps_2[1] < other_arm_thresh # don't care about box/center well?
+                    np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and
+                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh)
                 ):
                     self._handle_replay(2, ts)
 
                 elif (
                     avg_arm_ps_2[2] > avg_arm_ps_1[2] and
                     avg_arm_ps_1[2] > secondary_arm_thresh and
-                    avg_arm_ps_1[1] < other_arm_thresh and # don't care about box/center well?
-                    avg_arm_ps_2[1] < other_arm_thresh # don't care about box/center well?
+                    np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and
+                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh)
                 ):
                     self._handle_replay(2, ts)
 
@@ -553,7 +572,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             print(f"Replay arm {arm} rewarded")
             self._trodes_client.send_statescript_shortcut_message(14)
 
+        ############################################################################################
         # write record
+        ############################################################################################
 
 
     def _find_replay_instructive(self, ind, msg):
@@ -619,11 +640,13 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self._trodes_client.send_statescript_shortcut_message(14)
             self._instr_rewards[1:] = self._instr_rewards[:-1]
             self._instr_rewards[0] = arm
-            self._choose_next_target()
+            self._choose_next_instructive_target()
 
+        ##############################################################################################
         # write record
+        ##############################################################################################
 
-    def _choose_next_target(self):
+    def _choose_next_instructive_target(self):
 
         if np.all(self._instr_rewards == 1):
             print('INSTRUCTIVE: switch to arm 2')
@@ -639,6 +662,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         return self._task_state == 2 and other_condition
 
     def _init_stim_params(self):
+
         # Convention
         # ts - timestamp
         # ls - lockout samples

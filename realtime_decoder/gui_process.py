@@ -44,7 +44,7 @@ def _show_message(parent, text, *, kind=None):
         msg.addButton(QMessageBox.Ok)
         msg.exec_()
         return
-    
+
     msg = QMessageBox(parent)
     msg.setText(text)
     msg.setIcon(kind)
@@ -101,7 +101,7 @@ class DialogSendInterface(base.StandardMPISendInterface):
         )
 
 class GenericGuiRecvInterface(base.MPIRecvInterface):
-    
+
     def __init__(
         self, comm, rank, config,
         msg_dtype, msg_tag, msg_handler
@@ -147,16 +147,9 @@ class TabbedDialog(QDialog):
             name=f'{self.__class__.__name__}'
         )
 
-        self._main_params = messages.GuiMainParameters(
-            None, None, None, None,
-            None, None, None
-        )
-        self._ripple_params = messages.GuiRippleParameters(
-            None, None, None, None, None, None
-        )
-        self._model_params = messages.GuiEncodingModelParameters(
-            None, None
-        )
+        self._main_params = messages.GuiMainParameters()
+        self._ripple_params = messages.GuiRippleParameters()
+        self._model_params = messages.GuiEncodingModelParameters()
 
         self._timer = None
         timer_interval = self._config['gui']['send_interval']
@@ -177,7 +170,7 @@ class TabbedDialog(QDialog):
 
         layout = QGridLayout(self._params_tab)
 
-        # add helpful tool tips!        
+        # add helpful tool tips!
         self._setup_stim_params(layout)
         self._setup_ripple_params(layout)
         self._setup_model_params(layout)
@@ -197,7 +190,9 @@ class TabbedDialog(QDialog):
         self._setup_min_duration(layout)
         self._setup_well_angle_range(layout)
         self._setup_within_angle_range(layout)
-        self._setup_shortcut_message_on(layout)
+        self._setup_replay_stim(layout)
+        self._setup_ripple_stim(layout)
+        self._setup_head_direction_stim(layout)
 
     def _setup_instructive_task(self, layout):
 
@@ -206,26 +201,38 @@ class TabbedDialog(QDialog):
             text += 'Instructive'
         else:
             text += 'Non-instructive'
-        
+
         self._instructive_task_label = QLabel(self.tr(text))
         layout.addWidget(self._instructive_task_label, 1, 0)
 
     def _setup_target_arm(self, layout):
-        
-        text = 'Target arm: '
-        if self._config['stimulation']['instructive']:
-            text += 'Variable (determined by stim decider)'
-        else:
-            text += f"{self._config['stimulation']['replay_target_arm']}"
 
-        self._target_arm_label = QLabel(self.tr(text))
+        self._target_arm_label = QLabel(self.tr("Replay Target Arm"))
         layout.addWidget(self._target_arm_label, 2, 0)
+
+        self._target_arm_edit = QLineEdit()
+        layout.addWidget(self._target_arm_edit, 2, 1)
+
+        self._target_arm_button = QPushButton(self.tr("Update"))
+        self._target_arm_button.pressed.connect(self._check_target_arm)
+        layout.addWidget(self._target_arm_button, 2, 2)
+
+        arm = self._config['stimulation']['replay']['target_arm']
+
+        if self._config['stimulation']['instructive']:
+            value = "Handled by stim decider"
+            self._target_arm_button.setEnabled(False)
+        else:
+            value = str(arm)
+
+        self._target_arm_edit.setText(value)
+        self._main_params.replay_target_arm = arm
 
     def _setup_post_thresh(self, layout):
         self._post_label = QLabel(self.tr("Posterior Threshold"))
         self._post_label.setToolTip("Just a helpful tool tip")
         layout.addWidget(self._post_label, 3, 0)
-        
+
         self._post_edit = QLineEdit()
         layout.addWidget(self._post_edit, 3, 1)
 
@@ -242,7 +249,7 @@ class TabbedDialog(QDialog):
     def _setup_max_center_well_distance(self, layout):
         self._max_center_well_label = QLabel(self.tr("Max Center Well Distance"))
         layout.addWidget(self._max_center_well_label, 4, 0)
-        
+
         self._max_center_well_edit = QLineEdit()
         layout.addWidget(self._max_center_well_edit, 4, 1)
 
@@ -257,7 +264,7 @@ class TabbedDialog(QDialog):
     def _setup_num_above_thresh(self, layout):
         self._num_above_label = QLabel(self.tr("Num. Trodes Above Threshold"))
         layout.addWidget(self._num_above_label, 5, 0)
-        
+
         self._num_above_edit = QLineEdit()
         layout.addWidget(self._num_above_edit, 5, 1)
 
@@ -320,34 +327,82 @@ class TabbedDialog(QDialog):
         self._within_angle_range_edit.setText(str(value))
         self._main_params.within_angle_range = value
 
-    def _setup_shortcut_message_on(self, layout):
-        self._shortcut_label = QLabel(self.tr("Shortcut Message"))
-        layout.addWidget(self._shortcut_label, 9, 0)
-        
-        self._shortcut_on = QRadioButton(self.tr("ON"))        
-        self._shortcut_off = QRadioButton(self.tr("OFF"))
-        shortcut_layout = QHBoxLayout()
-        shortcut_layout.addWidget(self._shortcut_on)
-        shortcut_layout.addWidget(self._shortcut_off)
-        shortcut_group_box = QGroupBox()
-        shortcut_group_box.setLayout(shortcut_layout)
-        layout.addWidget(shortcut_group_box, 9, 1)
+    def _setup_replay_stim(self, layout):
+        self._replay_stim_label = QLabel(self.tr("Replay Stim"))
+        layout.addWidget(self._replay_stim_label, 9, 0)
 
-        self._shortcut_message_button = QPushButton(self.tr("Update"))
-        self._shortcut_message_button.pressed.connect(self._check_shortcut)
-        layout.addWidget(self._shortcut_message_button, 9, 2)
+        self._replay_stim_on = QRadioButton(self.tr("ON"))
+        self._replay_stim_off = QRadioButton(self.tr("OFF"))
+        replay_layout = QHBoxLayout()
+        replay_layout.addWidget(self._replay_stim_on)
+        replay_layout.addWidget(self._replay_stim_off)
+        replay_group_box = QGroupBox()
+        replay_group_box.setLayout(replay_layout)
+        layout.addWidget(replay_group_box, 9, 1)
 
-        if self._config['stimulation']['shortcut_msg_on']:
-            self._shortcut_on.setChecked(True)
-            self._main_params.shortcut_message_on = True
+        self._replay_stim_button = QPushButton(self.tr("Update"))
+        self._replay_stim_button.pressed.connect(self._check_replay_stim)
+        layout.addWidget(self._replay_stim_button, 9, 2)
+
+        if self._config['stimulation']['replay']['enabled']:
+            self._replay_stim_on.setChecked(True)
+            self._main_params.replay_stim_enabled = True
         else:
-            self._shortcut_off.setChecked(True)
-            self._main_params.shortcut_message_on = False
+            self._replay_stim_off.setChecked(True)
+            self._main_params.replay_stim_enabled = False
+
+    def _setup_ripple_stim(self, layout):
+        self._ripple_stim_label = QLabel(self.tr("Ripple Stim"))
+        layout.addWidget(self._ripple_stim_label, 10, 0)
+
+        self._ripple_stim_on = QRadioButton(self.tr("ON"))
+        self._ripple_stim_off = QRadioButton(self.tr("OFF"))
+        ripple_layout = QHBoxLayout()
+        ripple_layout.addWidget(self._ripple_stim_on)
+        ripple_layout.addWidget(self._ripple_stim_off)
+        ripple_group_box = QGroupBox()
+        ripple_group_box.setLayout(ripple_layout)
+        layout.addWidget(ripple_group_box, 10, 1)
+
+        self._ripple_stim_button = QPushButton(self.tr("Update"))
+        self._ripple_stim_button.pressed.connect(self._check_ripple_stim)
+        layout.addWidget(self._ripple_stim_button, 10, 2)
+
+        if self._config['stimulation']['ripples']['enabled']:
+            self._ripple_stim_on.setChecked(True)
+            self._main_params.ripple_stim_enabled = True
+        else:
+            self._ripple_stim_off.setChecked(True)
+            self._main_params.ripple_stim_enabled = False
+
+    def _setup_head_direction_stim(self, layout):
+        self._hdir_stim_label = QLabel(self.tr("Head Direction Stim"))
+        layout.addWidget(self._hdir_stim_label, 11, 0)
+
+        self._hdir_stim_on = QRadioButton(self.tr("ON"))
+        self._hdir_stim_off = QRadioButton(self.tr("OFF"))
+        hdir_layout = QHBoxLayout()
+        hdir_layout.addWidget(self._hdir_stim_on)
+        hdir_layout.addWidget(self._hdir_stim_off)
+        hdir_group_box = QGroupBox()
+        hdir_group_box.setLayout(hdir_layout)
+        layout.addWidget(hdir_group_box, 11, 1)
+
+        self._hdir_stim_button = QPushButton(self.tr("Update"))
+        self._hdir_stim_button.pressed.connect(self._check_hdir_stim)
+        layout.addWidget(self._hdir_stim_button, 11, 2)
+
+        if self._config['stimulation']['head_direction']['enabled']:
+            self._hdir_stim_on.setChecked(True)
+            self._main_params.head_direction_stim_enabled = True
+        else:
+            self._hdir_stim_off.setChecked(True)
+            self._main_params.head_direction_stim_enabled = False
 
     def _setup_ripple_params(self, layout):
         self._ripple_label = QLabel(self.tr("Ripple"))
         self._ripple_label.setStyleSheet("font-weight: bold")
-        layout.addWidget(self._ripple_label, 10, 0)
+        layout.addWidget(self._ripple_label, 12, 0)
 
         self._setup_ripple_detect_vel(layout)
         self._setup_rip_thresh(layout)
@@ -357,14 +412,14 @@ class TabbedDialog(QDialog):
 
     def _setup_ripple_detect_vel(self, layout):
         self._ripple_vel_thresh_label = QLabel(self.tr("Ripple Velocity Threshold"))
-        layout.addWidget(self._ripple_vel_thresh_label, 11, 0)
-        
+        layout.addWidget(self._ripple_vel_thresh_label, 13, 0)
+
         self._ripple_vel_thresh_edit = QLineEdit()
-        layout.addWidget(self._ripple_vel_thresh_edit, 11, 1)
+        layout.addWidget(self._ripple_vel_thresh_edit, 13, 1)
 
         self._ripple_vel_thresh_button = QPushButton(self.tr("Update"))
         self._ripple_vel_thresh_button.pressed.connect(self._check_ripple_vel_thresh)
-        layout.addWidget(self._ripple_vel_thresh_button, 11, 2)
+        layout.addWidget(self._ripple_vel_thresh_button, 13, 2)
 
         value = float(self._config['ripples']['vel_thresh'])
         self._ripple_vel_thresh_edit.setText(str(value))
@@ -372,15 +427,15 @@ class TabbedDialog(QDialog):
 
     def _setup_rip_thresh(self, layout):
         self._rip_thresh_label = QLabel(self.tr("Ripple Threshold"))
-        layout.addWidget(self._rip_thresh_label, 12, 0)
-        
+        layout.addWidget(self._rip_thresh_label, 14, 0)
+
         self._rip_thresh_edit = QLineEdit()
-        layout.addWidget(self._rip_thresh_edit, 12, 1)
+        layout.addWidget(self._rip_thresh_edit, 14, 1)
 
         self._rip_thresh_button = QPushButton(self.tr("Update"))
         self._rip_thresh_button.pressed.connect(self._check_rip_thresh)
-        layout.addWidget(self._rip_thresh_button, 12, 2)
-        
+        layout.addWidget(self._rip_thresh_button, 14, 2)
+
         value = float(self._config['ripples']['threshold']['standard'])
         self._rip_thresh_edit.setText(str(value))
         self._ripple_params.ripple_threshold = value
@@ -389,17 +444,17 @@ class TabbedDialog(QDialog):
         self._cond_rip_thresh_label = QLabel(
             self.tr("Conditioning Ripple Threshold")
         )
-        layout.addWidget(self._cond_rip_thresh_label, 13, 0)
-        
+        layout.addWidget(self._cond_rip_thresh_label, 15, 0)
+
         self._cond_rip_thresh_edit = QLineEdit()
-        layout.addWidget(self._cond_rip_thresh_edit, 13, 1)
+        layout.addWidget(self._cond_rip_thresh_edit, 15, 1)
 
         self._cond_rip_thresh_button = QPushButton(self.tr("Update"))
         self._cond_rip_thresh_button.pressed.connect(
             self._check_cond_rip_thresh
         )
-        layout.addWidget(self._cond_rip_thresh_button, 13, 2)
-        
+        layout.addWidget(self._cond_rip_thresh_button, 15, 2)
+
         value = float(self._config['ripples']['threshold']['conditioning'])
         self._cond_rip_thresh_edit.setText(str(value))
         self._ripple_params.conditioning_ripple_threshold = value
@@ -408,17 +463,17 @@ class TabbedDialog(QDialog):
         self._content_rip_thresh_label = QLabel(
             self.tr("Content Ripple Threshold")
         )
-        layout.addWidget(self._content_rip_thresh_label, 14, 0)
-        
+        layout.addWidget(self._content_rip_thresh_label, 16, 0)
+
         self._content_rip_thresh_edit = QLineEdit()
-        layout.addWidget(self._content_rip_thresh_edit, 14, 1)
+        layout.addWidget(self._content_rip_thresh_edit, 16, 1)
 
         self._content_rip_thresh_button = QPushButton(self.tr("Update"))
         self._content_rip_thresh_button.pressed.connect(
             self._check_content_rip_thresh
         )
-        layout.addWidget(self._content_rip_thresh_button, 14, 2)
-        
+        layout.addWidget(self._content_rip_thresh_button, 16, 2)
+
         value = float(self._config['ripples']['threshold']['content'])
         self._content_rip_thresh_edit.setText(str(value))
         self._ripple_params.content_ripple_threshold = value
@@ -427,16 +482,16 @@ class TabbedDialog(QDialog):
         self._end_rip_thresh_label = QLabel(
             self.tr("End of Ripple Threshold")
         )
-        layout.addWidget(self._end_rip_thresh_label, 15, 0)
-        
+        layout.addWidget(self._end_rip_thresh_label, 17, 0)
+
         self._end_rip_thresh_edit = QLineEdit()
-        layout.addWidget(self._end_rip_thresh_edit, 15, 1)
+        layout.addWidget(self._end_rip_thresh_edit, 17, 1)
 
         self._end_rip_thresh_button = QPushButton(self.tr("Update"))
         self._end_rip_thresh_button.pressed.connect(
             self._check_end_rip_thresh
         )
-        layout.addWidget(self._end_rip_thresh_button, 15, 2)
+        layout.addWidget(self._end_rip_thresh_button, 17, 2)
 
         value = float(self._config['ripples']['threshold']['end'])
         self._end_rip_thresh_edit.setText(str(value))
@@ -445,20 +500,20 @@ class TabbedDialog(QDialog):
     def _setup_model_params(self, layout):
         self._model_label = QLabel(self.tr("Encoding Model"))
         self._model_label.setStyleSheet("font-weight: bold")
-        layout.addWidget(self._model_label, 16, 0)
+        layout.addWidget(self._model_label, 18, 0)
 
         self._setup_encoding_model_vel(layout)
 
     def _setup_encoding_model_vel(self, layout):
         self._encoding_vel_thresh_label = QLabel(self.tr("Encoding Velocity Threshold"))
-        layout.addWidget(self._encoding_vel_thresh_label, 17, 0)
-        
+        layout.addWidget(self._encoding_vel_thresh_label, 19, 0)
+
         self._encoding_vel_thresh_edit = QLineEdit()
-        layout.addWidget(self._encoding_vel_thresh_edit, 17, 1)
+        layout.addWidget(self._encoding_vel_thresh_edit, 19, 1)
 
         self._encoding_vel_thresh_button = QPushButton(self.tr("Update"))
         self._encoding_vel_thresh_button.pressed.connect(self._check_encoding_vel_thresh)
-        layout.addWidget(self._encoding_vel_thresh_button, 17, 2)
+        layout.addWidget(self._encoding_vel_thresh_button, 19, 2)
 
         value = float(self._config['encoder']['vel_thresh'])
         self._encoding_vel_thresh_edit.setText(str(value))
@@ -483,7 +538,7 @@ class TabbedDialog(QDialog):
         self._general_control_label = QLabel(self.tr("General"))
         self._general_control_label.setStyleSheet("font-weight: bold")
         layout.addWidget(self._general_control_label, 0, 0)
-        
+
         self._setup_startup(layout)
         self._setup_shutdown(layout)
 
@@ -513,13 +568,13 @@ class TabbedDialog(QDialog):
         self._setup_ripple_freeze(layout)
 
     def _setup_ripple_freeze(self, layout):
-        
+
         self._is_ripple_stats_frozen = self._config['ripples']['freeze_stats']
         if self._is_ripple_stats_frozen:
             text = "Unfreeze ripple stats"
         else:
             text = "Freeze ripple stats"
-        
+
         self._ripple_freeze_button = QPushButton(self.tr(text))
         layout.addWidget(self._ripple_freeze_button, 3, 0)
 
@@ -533,11 +588,11 @@ class TabbedDialog(QDialog):
         self._encoding_freeze_label = QLabel(self.tr("Encoding"))
         self._encoding_freeze_label.setStyleSheet("font-weight: bold")
         layout.addWidget(self._encoding_freeze_label, 4, 0)
-    
+
         self._setup_encoding_freeze(layout)
 
     def _setup_encoding_freeze(self, layout):
-        
+
         self._is_encoding_model_frozen = self._config['frozen_model']
         if self._is_encoding_model_frozen:
             text = "Unfreeze encoding model"
@@ -553,9 +608,37 @@ class TabbedDialog(QDialog):
 
         self._model_params.freeze_model = self._is_encoding_model_frozen
 
+    def _check_target_arm(self):
+
+        target_arm = self._target_arm_edit.text()
+
+        try:
+            num_arms = len(
+                self._config['encoder']['position']['arm_coords']
+            )
+            target_arm = int(target_arm)
+            if target_arm < 0:
+                target_arm = 0
+            elif target_arm >= num_arms:
+                target_arm = num_arms - 1
+
+            self._main_params.replay_target_arm = target_arm
+            self._send_main_params()
+            _show_message(
+                self,
+                f"Message sent - Replay target arm: {target_arm}"
+            )
+            self._target_arm_edit.setText(str(target_arm))
+
+        except Exception as e:
+            _show_message(
+                self, "An unexpected exception occurred! " + e.args[0],
+                kind='critical'
+            )
+
     def _check_post_thresh(self):
         post_thresh = self._post_edit.text()
-        
+
         try:
             post_thresh = float(post_thresh)
             if post_thresh < 0:
@@ -570,7 +653,7 @@ class TabbedDialog(QDialog):
                 f"Message sent - Posterior threshold value: {post_thresh}",
                 kind="information")
             self._post_edit.setText(str(post_thresh))
-        
+
         except Exception as e:
             _show_message(
                 self, "An unexpected exception occurred! " + e.args[0],
@@ -579,7 +662,7 @@ class TabbedDialog(QDialog):
 
     def _check_max_center_well(self):
         dist = self._max_center_well_edit.text()
-        
+
         try:
             dist = float(dist)
             # any other restrictions?
@@ -595,7 +678,7 @@ class TabbedDialog(QDialog):
                 f"Message sent - Max center well distance (cm) value: {dist}",
                 kind="information")
             self._max_center_well_edit.setText(str(dist))
-        
+
         except Exception as e:
             _show_message(
                 self, "An unexpected exception occurred! " + e.args[0],
@@ -605,7 +688,7 @@ class TabbedDialog(QDialog):
     def _check_num_above(self):
         max_n_above = len(self._config["trode_selection"]["ripples"])
         n_above = self._num_above_edit.text()
-        
+
         try:
             n_above = float(n_above)
             _, rem = divmod(n_above, 1)
@@ -630,16 +713,16 @@ class TabbedDialog(QDialog):
                     f"Message sent - n above threshold value: {n_above}",
                     kind="information")
                 self._num_above_edit.setText(str(n_above))
-        
+
         except Exception as e:
             _show_message(
                 self, "An unexpected exception occurred! " + e.args[0],
                 kind='critical'
             )
-    
+
     def _check_min_duration(self):
         min_duration = self._min_duration_edit.text()
-        
+
         try:
             min_duration = float(min_duration)
             # any other restrictions?
@@ -654,7 +737,7 @@ class TabbedDialog(QDialog):
                 kind="information"
             )
             self._min_duration_edit.setText(str(min_duration))
-        
+
         except Exception as e:
             _show_message(
                 self, "An unexpected exception occurred! " + e.args[0],
@@ -663,7 +746,7 @@ class TabbedDialog(QDialog):
 
     def _check_well_angle_range(self):
         well_angle_range = self._well_angle_range_edit.text()
-        
+
         try:
             well_angle_range = float(well_angle_range)
             # any other restrictions?
@@ -680,7 +763,7 @@ class TabbedDialog(QDialog):
                 kind="information"
             )
             self._well_angle_range_edit.setText(str(well_angle_range))
-        
+
         except Exception as e:
             _show_message(
                 self, "An unexpected exception occurred! " + e.args[0],
@@ -689,7 +772,7 @@ class TabbedDialog(QDialog):
 
     def _check_within_angle_range(self):
         within_angle_range = self._within_angle_range_edit.text()
-        
+
         try:
             within_angle_range = float(within_angle_range)
             # any other restrictions?
@@ -736,9 +819,84 @@ class TabbedDialog(QDialog):
                 kind='critical'
             )
 
+    def _check_replay_stim(self):
+        replay_stim_on = self._replay_stim_on.isChecked()
+        try:
+            if replay_stim_on:
+                self._main_params.replay_stim_enabled = True
+                self._send_main_params()
+                _show_message(
+                    self,
+                    "Message sent - Replay stim ON",
+                    kind='information'
+                )
+            else:
+                self._main_params.replay_stim_enabled = False
+                self._send_main_params()
+                _show_message(
+                    self,
+                    "Message sent - Replay stim OFF",
+                    kind='information'
+                )
+        except Exception as e:
+            _show_message(
+                self, "An unexpected exception occurred! " + e.args[0],
+                kind='critical'
+            )
+
+    def _check_ripple_stim(self):
+        ripple_stim_on = self._ripple_stim_on.isChecked()
+        try:
+            if ripple_stim_on:
+                self._main_params.ripple_stim_enabled = True
+                self._send_main_params()
+                _show_message(
+                    self,
+                    "Message sent - Ripple stim ON",
+                    kind='information'
+                )
+            else:
+                self._main_params.ripple_stim_enabled = False
+                self._send_main_params()
+                _show_message(
+                    self,
+                    "Message sent - Ripple stim OFF",
+                    kind='information'
+                )
+        except Exception as e:
+            _show_message(
+                self, "An unexpected exception occurred! " + e.args[0],
+                kind='critical'
+            )
+
+    def _check_hdir_stim(self):
+        hdir_stim_on = self._hdir_stim_on.isChecked()
+        try:
+            if hdir_stim_on:
+                self._main_params.head_direction_stim_enabled = True
+                self._send_main_params()
+                _show_message(
+                    self,
+                    "Message sent - Head direction stim ON",
+                    kind='information'
+                )
+            else:
+                self._main_params.head_direction_stim_enabled = False
+                self._send_main_params()
+                _show_message(
+                    self,
+                    "Message sent - Head direction stim ON",
+                    kind='information'
+                )
+        except Exception as e:
+            _show_message(
+                self, "An unexpected exception occurred! " + e.args[0],
+                kind='critical'
+            )
+
     def _check_ripple_vel_thresh(self):
         ripple_vel_thresh = self._ripple_vel_thresh_edit.text()
-        
+
         try:
             ripple_vel_thresh = float(ripple_vel_thresh)
             if ripple_vel_thresh < 0:
@@ -751,7 +909,7 @@ class TabbedDialog(QDialog):
                 f"Message sent - Ripple velocity threshold value: {ripple_vel_thresh}",
                 kind="information")
             self._ripple_vel_thresh_edit.setText(str(ripple_vel_thresh))
-        
+
         except Exception as e:
             _show_message(
                 self, "An unexpected exception occurred! " + e.args[0],
@@ -864,13 +1022,13 @@ class TabbedDialog(QDialog):
             )
 
     def _initiate_startup(self):
-        
+
         # send startup signal
         self._send_interface.send_startup()
         self._startup_button.setEnabled(False)
 
     def _initiate_shutdown(self):
-        
+
         # send terminate signal
         self._send_interface.send_shutdown()
         self._shutdown_button.setEnabled(False)
@@ -883,7 +1041,7 @@ class TabbedDialog(QDialog):
         else:
             self._is_ripple_stats_frozen = True
             self._ripple_freeze_button.setText("Unfreeze ripple stats")
-        
+
         self._ripple_params.freeze_stats = self._is_ripple_stats_frozen
         self._send_ripple_params()
 
@@ -981,7 +1139,7 @@ class DecodingResultsWindow(QMainWindow):
 
         self._init_plots()
         self._init_colormap()
-        
+
         self._dialog = TabbedDialog(self, comm, rank, config)
         self._dialog.move(
             self.pos().x() + self.frameGeometry().width() + 100, self.pos().y())
@@ -1134,7 +1292,7 @@ class DecodingResultsWindow(QMainWindow):
     def _setup_lk_plots(self, num_plots, bin_edges, arm_coords):
 
         for ii in range(num_plots):
-            
+
             dec_rank = self._config['rank']['decoders'][ii]
 
             # create plots/plot properties
@@ -1147,7 +1305,7 @@ class DecodingResultsWindow(QMainWindow):
                 }
             )
             self._plots['lk'][ii].setMenuEnabled(False)
-            
+
             # add plot items
             for lower_bin, upper_bin in arm_coords:
                 lb = bin_edges[lower_bin]
@@ -1172,9 +1330,9 @@ class DecodingResultsWindow(QMainWindow):
                 )
 
     def _setup_posterior_plots(self, num_plots, bin_edges, arm_coords):
-        
+
         for ii in range(num_plots):
-            
+
             dec_rank = self._config['rank']['decoders'][ii]
 
             # create plot/plot properties
@@ -1253,7 +1411,7 @@ class DecodingResultsWindow(QMainWindow):
         if self._elapsed_timer.elapsed() > self._refresh_msec:
             self._elapsed_timer.start()
             self._update_display_data()
-            
+
     def _update_display_data(self):
 
         # set plot data
@@ -1351,7 +1509,7 @@ class DecodingResultsWindow(QMainWindow):
         self._update_status_bar()
 
     def _update_arm_events(self, msg, mpi_status):
-        
+
         ##############################################################################################################
         # Implement
         ##############################################################################################################
@@ -1365,7 +1523,7 @@ class DecodingResultsWindow(QMainWindow):
         self._update_status_bar()
 
     def _update_status_bar(self):
-        
+
         sb_string = ""
         for ii, num_events in enumerate(self._sbdata['arm_events']):
             if ii > 0: # skip events belonging to box

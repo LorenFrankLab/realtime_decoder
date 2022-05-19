@@ -371,7 +371,7 @@ class MainProcess(base.RealtimeProcess):
         )
 
         self._gui_params_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.GUI_COMMAND_MESSAGE,
+            comm, rank, config, messages.MPIMessageTag.GUI_PARAMETERS,
             stim_decider
         )
 
