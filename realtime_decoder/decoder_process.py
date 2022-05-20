@@ -64,7 +64,7 @@ class SpikeRecvInterface(base.MPIRecvInterface):
                 buf=self._msg_buffer,
                 tag=messages.MPIMessageTag.SPIKE_DECODE_DATA
             )
-            
+
             return msg
 
         return None
@@ -184,7 +184,7 @@ class ClusterlessDecoder(base.Decoder):
         if spike_arr.shape[0] > 0:
             for data in spike_arr:
                 # extract elec_grp_id, pos
-                elec_grp_id = data[1] 
+                elec_grp_id = data[1]
                 pos = data[2]
                 bin_idx = self._pos_bin_struct.get_bin(pos)
                 # do not need to apply no-animal condition because
@@ -216,7 +216,7 @@ class ClusterlessDecoder(base.Decoder):
 
         if self.p['algorithm'] == 'clusterless_decoder':
             self._posterior = (
-                self._likelihood[None, :] * 
+                self._likelihood[None, :] *
                 (self._prev_posterior @ self._transmat)
             )
         elif self.p['algorithm'] == 'clusterless_classifier':
@@ -297,7 +297,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
                 'raw_x', 'raw_y', 'raw_x2', 'raw_y2', 'x', 'y',
                 'spike_count', 'task_state', 'cred_int_post', 'cred_int_lk',
                 'dec_rank', 'dropped_spikes', 'duplicated_spikes', 'vel_thresh',
-                'frozen_model'] + 
+                'frozen_model'] +
                 pos_labels + state_labels,
                 ['bin_timestamp_l', 'bin_timestamp_r', 'mapped_pos', 'spike_count', 'dec_rank',
                  'vel_thresh', 'frozen_model'] +
@@ -498,7 +498,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['tbin_delay_samples'] = self._config['decoder']['time_bin']['delay_samples']
         self.p['first_decoder_rank'] = self._config['rank']['decoders'][0]
 
-    
+
     def _process_spike(self, spike_msg):
 
         self._record_timings(
@@ -589,7 +589,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         occupancy = self._decoder.update_position(
             self._current_pos, update_occupancy
         )
-        
+
         if self._not_task_1_ct == 1:
             # we also save decoder at the end of the program,
             # but we do it here as well just to be safe
@@ -621,7 +621,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self.send_interface.send_velocity_position(
                 self._config['rank']['supervisor'][0], self._vel_pos_msg
             )
-            
+
         self._pos_ct += 1
 
     def _record_timings(self, trode, timestamp, t_decoder):
@@ -697,10 +697,10 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self.class_log.info(
                 f"Wrote timings file for trode {trode} to {filename}"
             )
-        
+
 
     def _is_training_epoch(self):
-        
+
         res = (
             abs(self._current_vel) >= self.p['vel_thresh'] and
             self._task_state == 1 and
@@ -713,8 +713,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         # these are default values. if there are relevant spikes
         # in the time bin of interest, these will be populated
         # accordingly
-        enc_cred_intervals = np.ones(self.p['cred_int_bufsize'], dtype=int) * np.nan
-        enc_argmaxes = np.ones(self.p['cred_int_bufsize'], dtype=int) * np.nan
+        enc_cred_intervals = np.zeros(self.p['cred_int_bufsize'], dtype=int)
+        enc_argmaxes = np.zeros(self.p['cred_int_bufsize'], dtype=int)
 
         lb = int(timestamp - self.p['tbin_delay_samples'] - self.p['tbin_samples'])
         ub = int(timestamp - self.p['tbin_delay_samples'])
@@ -727,7 +727,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
             # these spikes are being used. mark them with a 1
             self._spike_buf[spikes_in_bin_mask, 4] = 1
-            
+
             spikes_before = np.atleast_2d(
                 self._spike_buf[spikes_in_bin_mask]
             )
@@ -781,7 +781,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         cred_int_post, cred_int_lk = self._compute_credible_interval(
             posterior, likelihood
         )
-        
+
         # populate message data and send to main and gui
         self._posterior_msg[0]['rank'] = self.rank
         self._posterior_msg[0]['lfp_timestamp'] = timestamp

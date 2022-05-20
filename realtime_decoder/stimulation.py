@@ -381,22 +381,21 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def _update_posterior(self, msg):
 
-        ind = self._decoder_rank_ind_map[msg[0]['rank']]
+        self._dec_ind = self._decoder_rank_ind_map[msg[0]['rank']]
 
-        self._update_spike_stats(ind, msg)
-
-        marginal_prob = self._update_decode_stats(ind, msg)
-
-        self._update_prob_sums(ind, marginal_prob)
+        self._update_spike_stats(msg)
+        self._update_decode_stats(msg)
 
         if self.p['instructive']:
-            self._find_replay_instructive(ind, msg)
+            self._find_replay_instructive(msg)
         else:
-            self._find_replay(ind, msg)
+            self._find_replay(msg)
 
         self._dd_ind = (self._dd_ind + 1) % self.p_replay['sliding_window']
 
-    def _update_spike_stats(self, ind, msg):
+    def _update_spike_stats(self, msg):
+
+        ind = self._dec_ind
 
         # add new spike counts
         self._spike_count[ind] = msg[0]['spike_count']
@@ -418,7 +417,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         )
         self._bin_fr_std[ind] = self._bin_fr_M2[ind] / self._bin_fr_N[ind]
 
-    def _update_decode_stats(self, ind, msg):
+    def _update_decode_stats(self, msg):
+
+        ind = self._dec_ind
 
         if self.p_replay['method'] == 'map':
             marginal_prob = msg[0]['posterior'].sum(axis=0)
@@ -434,9 +435,16 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._dec_ci_buff[ind, self._dd_ind] = ci_decoder
         self._dec_argmax_buff[ind, self._dd_ind] = decoder_argmax
 
-        return marginal_prob
+        # add new credible intervals and argmaxes from encoder
+        # data
+        self._enc_ci_buff[ind, self._dd_ind] = msg[0]['enc_cred_intervals']
+        self._enc_argmax_buff[ind, self._dd_ind] = msg[0]['enc_argmaxes']
 
-    def _update_prob_sums(self, ind, marginal_prob):
+        self._update_prob_sums(marginal_prob)
+
+    def _update_prob_sums(self, marginal_prob):
+
+        ind = self._dec_ind
 
         arm_probs = self._compute_arm_probs(marginal_prob)
         self._arm_ps_buff[ind, self._dd_ind] = arm_probs
@@ -455,6 +463,14 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._region_ps_base_buff[ind, self._dd_ind, 1] = ps_arm1_base
         self._region_ps_base_buff[ind, self._dd_ind, 2] = ps_arm2_base
 
+    def _compute_arm_probs(self, prob):
+
+        arm_probs = np.zeros(len(self.p['arm_coords']))
+        for ii, (a, b) in enumerate(self.p['arm_coords']):
+            arm_probs[ii] = prob[a:b+1].sum()
+
+        return arm_probs
+
     def _compute_region_probs(self, prob):
 
         ps_arm1 = prob[20:25].sum()
@@ -464,17 +480,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         return ps_arm1, ps_arm2, ps_arm1_base, ps_arm2_base
 
-    def _compute_arm_probs(self, prob):
-
-        arm_probs = np.zeros(len(self.p['arm_coords']))
-        for ii, (a, b) in enumerate(self.p['arm_coords']):
-            arm_probs[ii] = prob[a:b+1].sum()
-
-        return arm_probs
-
-    def _find_replay(self, ind, msg):
+    def _find_replay(self, msg):
 
         ts = msg[0]['bin_timestamp_r']
+        ind = self._dec_ind
 
         if ts <= self._replay_event_ts + self._replay_event_ls:
             return
@@ -507,7 +516,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh)
                 ):
 
-                    self._handle_replay(1, ts)
+                    self._handle_replay(1, msg)
 
                 elif (
                     avg_arm_ps_2[1] > avg_arm_ps_1[1] and
@@ -516,7 +525,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh)
                 ):
 
-                    self._handle_replay(1, ts)
+                    self._handle_replay(1, msg)
 
             # arm 2 candidate event
             elif (
@@ -530,7 +539,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and
                     np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh)
                 ):
-                    self._handle_replay(2, ts)
+                    self._handle_replay(2, msg)
 
                 elif (
                     avg_arm_ps_2[2] > avg_arm_ps_1[2] and
@@ -538,7 +547,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and
                     np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh)
                 ):
-                    self._handle_replay(2, ts)
+                    self._handle_replay(2, msg)
 
         else:
 
@@ -552,25 +561,26 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 avg_arm_ps[1] > arm_thresh and
                 np.all(avg_arm_ps[[0, 2]] < other_arm_thresh)
             ):
-                self._handle_replay(1, ts)
+                self._handle_replay(1, msg)
 
             # arm 2 candidate event
             elif (
                 avg_arm_ps[2] > arm_thresh and
                 np.all(avg_arm_ps[[0, 1]] < other_arm_thresh)
             ):
-                self._handle_replay(2, ts)
+                self._handle_replay(2, msg)
 
-    def _handle_replay(self, arm, ts):
+    def _handle_replay(self, arm, msg):
 
         # assumes already satisfied event lockout criterion.
         # all these events should therefore be recorded
 
         print(f"Replay arm {arm} detected")
 
-        self._replay_event_ts = ts
+        self._replay_event_ts = msg[0]['timestamp']
 
         num_unique = np.count_nonzero(self._enc_ci_buff)
+        print(f"Unique trodes: {num_unique}")
 
         send_shortcut = self._check_send_shortcut(
             self.p_replay['enabled'] and
@@ -588,9 +598,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         ############################################################################################
 
 
-    def _find_replay_instructive(self, ind, msg):
+    def _find_replay_instructive(self, msg):
 
         ts = msg[0]['bin_timestamp_r']
+        ind = self._dec_ind
 
         if self._num_decoders == 2:
             raise NotImplementedError(
@@ -615,7 +626,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 avg_region_ps_base[1] > arm_thresh and
                 np.all(avg_arm_ps[[0, 2]] < other_arm_thresh)
             ):
-                self._handle_replay_instructive(1, ts)
+                self._handle_replay_instructive(1, msg)
 
             # arm 2 candidate event
             elif (
@@ -623,18 +634,20 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 avg_region_ps_base[2] > arm_thresh and
                 np.all(avg_arm_ps[[0, 1]] < other_arm_thresh)
             ):
-                self._handle_replay_instructive(2, ts)
+                self._handle_replay_instructive(2, msg)
 
-    def _handle_replay_instructive(self, arm, ts):
+    def _handle_replay_instructive(self, arm, msg):
 
         # assumes already satisfied event lockout criterion.
         # all these events should therefore be recorded
 
         print(f"INSTRUCTIVE: Replay arm {arm} detected")
 
-        self._replay_event_ts = ts
+        self._replay_event_ts = msg[0]['timestamp']
 
         num_unique = np.count_nonzero(self._enc_ci_buff)
+        print(f"INSTRUCTIVE: Unique trodes: {num_unique}")
+
         outer_arm_visited = utils.get_last_num(self.p['instructive_file'])
 
         send_shortcut = self._check_send_shortcut(
@@ -646,7 +659,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         )
 
         if send_shortcut:
-            print(f"INSTRUCTIVE: Replay arm {arm} rewarded")
+            print(f"INSTRUCTIVE: Replay target arm {arm} rewarded")
             utils.write_text_file(self.p['instructive_file'], 0)
             self._trodes_client.send_statescript_shortcut_message(14)
             self._instr_rewarded_arms[1:] = self._instr_rewarded_arms[:-1]
@@ -667,6 +680,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self.p_replay['target_arm'] = 1
         else:
             self.p_replay['target_arm'] = np.random.choice([1,2],1)[0]
+        print(f"INSTRUCTIVE: New target arm: {self.p_replay['target_arm']}")
 
     def _check_send_shortcut(self, other_condition):
 
@@ -733,6 +747,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         num_trodes = self._config['decoder']['cred_int_bufsize']
         num_decoders = self._num_decoders
 
+        self._dec_ind = 0 # decoder index of current posterior message
         self._dd_ind = 0 # shorthand for decode data
 
         # dim 2 is 3 because 3 regions - box, arm1, arm2
