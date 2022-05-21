@@ -38,18 +38,18 @@ decoder_assignment:
     33,35,36,38,39,41,42,43,44,47,
     48,50,52,53,54,55,56,58,64
   ]
-files:
-  output_dir: 'data/decoder-output'
-  prefix: 'fred'
-  rec_postfix: 'bin_rec'
-  timing_postfix: 'timing'
-  # backup_dir : 'data/decoder-output-backup' # optional
-  saved_model_dir: 'data/decoder-output' # only used if using a pre-loaded model
 algorithm: "clusterless_decoder"
 datasource: "trodes"
 num_setup_messages: 100
-preloaded_model: false   # be sure to change appropriately! ####################################################################################
-frozen_model: false      # be sure to change appropriately! ####################################################################################
+preloaded_model: false
+frozen_model: false
+files:
+  output_dir: 'data/decoder-output'
+  # backup_dir : 'data/decoder-output-backup' # optional
+  saved_model_dir: 'data/decoder-output' # only used if using a pre-loaded model
+  prefix: 'fred'
+  rec_postfix: 'bin_rec'
+  timing_postfix: 'timing'
 trodes:
   config_file: '20210419_fred_06_r3.trodesconf'
   # taskstate_file and instructive_file are optional,
