@@ -151,10 +151,10 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                  'elec_grp_id', 'ripple_type', 'env_mean', 'env_std',
                  'threshold_sigma', 'vel_thresh', 'stats_frozen', 'is_consensus'],
                 ['t_send_data', 't_recv_data', 't_sys', 'timestamp',
-                 'elec_grp_id', 'normal_end', 'threshold_sigma',
+                 'elec_grp_id', 'ripple_type', 'normal_end', 'threshold_sigma',
                  'stats_frozen', 'is_consensus'] 
             ],
-            rec_formats=['Iidd??ddddd', 'qqqqi10sdddd??', 'qqqqi?d??'],
+            rec_formats=['Iidd??ddddd', 'qqqqi10sdddd??', 'qqqqi10s?d??'],
             send_interface=send_interface,
             manager_label='state'
         )
@@ -177,6 +177,10 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         
         self._lockout_sample = OrderedDict()
         self._cons_lockout_sample = 0
+
+        self._in_standard_ripple = {}
+        self._in_cond_ripple = {}
+        self._in_content_ripple = {}
 
         self._lfp_count = 0
         self._curr_timestamp = -1
@@ -265,14 +269,22 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             mean = self._means[ii]
             sigma = self._sigmas[ii]
 
-            self._lockout_sample[trode] = self._detect_ripple_bounds(
+            (self._lockout_sample[trode],
+             self._in_standard_ripple[trode],
+             self._in_cond_ripple[trode],
+             self._in_content_ripple[trode]
+            ) = self._detect_ripple_bounds(
                 t_send_data, t_recv_data, msg_timestamp,
                 trode, data, mean, sigma,
                 self._lockout_sample[trode], False
             )
 
         # detect start/end of ripples for consensus trace
-        self._cons_lockout_sample = self._detect_ripple_bounds(
+        (self._cons_lockout_sample,
+         self._in_standard_ripple_cons,
+         self._in_cond_ripple_cons,
+         self._in_content_ripple_cons
+        ) = self._detect_ripple_bounds(
             t_send_data, t_recv_data, msg_timestamp,
             -1, cons_env, self._cons_mean, self._cons_sigma,
             self._cons_lockout_sample, True
@@ -311,6 +323,16 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         lockout_sample, is_consensus_trace
     ):
 
+        if is_consensus_trace:
+            in_standard_ripple = self._in_standard_ripple_cons
+            in_cond_ripple = self._in_cond_ripple_cons
+            in_content_ripple = self._in_content_ripple_cons
+        else:
+            in_standard_ripple = self._in_standard_ripple[trode]
+            in_cond_ripple = self._in_cond_ripple[trode]
+            in_content_ripple = self._in_content_ripple[trode]
+
+
         if lockout_sample == 0: # ok to detect ripples
             # note that velocity threshold is used only when detecting the
             # start of a standard ripple. all other detections (i.e. other
@@ -318,9 +340,15 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             # velocity threshold
             if (
                 datapoint > mean + self.p['standard_thresh']*sigma and
-                self._current_vel < self.p['vel_thresh']
+                self._current_vel < self.p['vel_thresh'] and
+                not in_standard_ripple
+
             ):
-                lockout_sample += 1
+
+                # sending message gets first priority
+                self._send_ripple_message(
+                    timestamp, trode, "standard", is_consensus_trace
+                )
                 self.write_record(
                     binary_record.RecordIDs.RIPPLE_DETECTED,
                     t_send_data, t_recv_data, time.time_ns(),
@@ -329,18 +357,22 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                     self.p['vel_thresh'], self.p['freeze_stats'],
                     is_consensus_trace
                 )
-                self._send_ripple_message(
-                    timestamp, trode, "standard", is_consensus_trace
-                )
+                # self.class_log.info(f"Standard ripple detected {timestamp}, {is_consensus_trace}")
+                lockout_sample += 1
+                in_standard_ripple = True
                 # log ripple detected
-                # self.class_log.info(f"Ripple detected {timestamp}")
         
         else: # we are currently in a ripple
 
             lockout_sample += 1
             
             # while in a ripple, see if other thresholds exceeded
-            if datapoint > mean + self.p['cond_thresh']*sigma:
+            # second condition is to prevent detecting ripple multiple times
+            if (datapoint > mean + self.p['cond_thresh']*sigma and not in_cond_ripple):
+                # sending message gets first priority
+                self._send_ripple_message(
+                    timestamp, trode, "cond", is_consensus_trace
+                )
                 self.write_record(
                     binary_record.RecordIDs.RIPPLE_DETECTED,
                     t_send_data, t_recv_data, time.time_ns(),
@@ -349,12 +381,15 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                     self.p['vel_thresh'], self.p['freeze_stats'],
                     is_consensus_trace
                 )
-                self._send_ripple_message(
-                    timestamp, trode, "cond", is_consensus_trace
-                )
+                # self.class_log.info(f"Cond ripple detected {timestamp}, {is_consensus_trace}")
                 # log conditioning ripple
+                in_cond_ripple = True
 
-            if datapoint > mean + self.p['content_thresh']*sigma:
+            if (datapoint > mean + self.p['content_thresh']*sigma and not in_content_ripple):
+                # sending message gets first priority
+                self._send_ripple_message(
+                    timestamp, trode, "content", is_consensus_trace
+                )
                 self.write_record(
                     binary_record.RecordIDs.RIPPLE_DETECTED,
                     t_send_data, t_recv_data, time.time_ns(),
@@ -363,40 +398,63 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                     self.p['vel_thresh'], self.p['freeze_stats'],
                     is_consensus_trace
                 )
-                self._send_ripple_message(
-                    timestamp, trode, "content", is_consensus_trace
-                )
+                # self.class_log.info(f"Content ripple detected {timestamp}, {is_consensus_trace}")
                 # log content ripple
+                in_content_ripple = True
 
             # test for end-of-ripple conditions
+            tup = (
+                (in_standard_ripple, 'standard'),
+                (in_cond_ripple, 'cond'),
+                (in_content_ripple, 'content')
+            )
             if datapoint <= mean + self.p['end_thresh']*sigma:
-                lockout_sample = 0
-                self.write_record(
-                    binary_record.RecordIDs.RIPPLE_END,
-                    t_send_data, t_recv_data, time.time_ns(),
-                    timestamp, trode, True, self.p['end_thresh'],
-                    self.p['freeze_stats'], is_consensus_trace
-                )
+
+                # sending message gets first priority
                 self._send_ripple_message(
                     timestamp, trode, "end", is_consensus_trace
                 )
+                for test_condition, rtype in tup:
+                    if test_condition:
+                        self.write_record(
+                            binary_record.RecordIDs.RIPPLE_END,
+                            t_send_data, t_recv_data, time.time_ns(),
+                            timestamp, trode, bytes(rtype, 'utf-8'),
+                            True, self.p['end_thresh'],
+                            self.p['freeze_stats'], is_consensus_trace
+                        )
+
+                # self.class_log.info(f"Ripple ended {timestamp}, {is_consensus_trace}")
+                lockout_sample = 0
+                in_standard_ripple = False
+                in_cond_ripple = False
+                in_content_ripple = False
                 # log ripple ended
-                # self.class_log.info(f"Ripple ended {timestamp}")
 
             if lockout_sample >= self.p['max_ripple_samples']:
-                lockout_sample = 0
-                self.write_record(
-                    binary_record.RecordIDs.RIPPLE_END,
-                    t_send_data, t_recv_data, time.time_ns(),
-                    timestamp, trode, False, self.p['end_thresh'],
-                    self.p['freeze_stats'], is_consensus_trace
-                )
+
+                # sending message gets first priority
                 self._send_ripple_message(
                     timestamp, trode, "end", is_consensus_trace
                 )
+                for test_condition, rtype in tup:
+                    if test_condition:
+                        self.write_record(
+                            binary_record.RecordIDs.RIPPLE_END,
+                            t_send_data, t_recv_data, time.time_ns(),
+                            timestamp, trode, bytes(rtype, 'utf-8'),
+                            False, self.p['end_thresh'],
+                            self.p['freeze_stats'], is_consensus_trace
+                        )
+
+                # self.class_log.info(f"Ripple ended {timestamp}, {is_consensus_trace}")
+                lockout_sample = 0
+                in_standard_ripple = False
+                in_cond_ripple = False
+                in_content_ripple = False
                 # log ripple ended
 
-        return lockout_sample
+        return lockout_sample, in_standard_ripple, in_cond_ripple, in_content_ripple
 
     def _send_ripple_message(
         self, timestamp, elec_grp_id, ripple_type,
@@ -437,6 +495,13 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         # for individual trace
         for trode in trodes:
             self._lockout_sample[trode] = 0
+            self._in_standard_ripple[trode] = False
+            self._in_cond_ripple[trode] = False
+            self._in_content_ripple[trode] = False
+
+        self._in_standard_ripple_cons = False
+        self._in_cond_ripple_cons = False
+        self._in_content_ripple_cons = False
 
     def _compute_lfp_send_interval(self):
 

@@ -81,10 +81,16 @@ def get_last_num(textfile):
     with open(textfile, 'rb') as f:
         fd = f.fileno()
         fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
-        f.seek(-2, os.SEEK_END)
-        while f.read(1) != b'\n':
-            f.seek(-2, os.SEEK_CUR)
-        last_num = int(f.readline().decode().rstrip('\r\n'))
+
+        try:
+            f.seek(-2, os.SEEK_END)
+            while f.read(1) != b'\n':
+                f.seek(-2, os.SEEK_CUR)
+        except: # file probably only has one line
+            f.seek(0) # go back to start of file
+
+        val = f.readline().decode().rstrip('\r\n')
+        last_num = int(val)
 
     return last_num
 

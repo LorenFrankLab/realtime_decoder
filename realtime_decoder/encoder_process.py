@@ -528,12 +528,12 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         #####################################################################################################
         # For testing, remove when finalized
-        self.write_record(
-            binary_record.RecordIDs.POS_INFO, pos_msg.timestamp,
-            pos_msg.x, pos_msg.y, pos_msg.x2, pos_msg.y2,
-            pos_msg.segment, pos_msg.position, _1, _2,
-            self._current_vel, self._current_pos
-        )
+        # self.write_record(
+        #     binary_record.RecordIDs.POS_INFO, pos_msg.timestamp,
+        #     pos_msg.x, pos_msg.y, pos_msg.x2, pos_msg.y2,
+        #     pos_msg.segment, pos_msg.position, _1, _2,
+        #     self._current_vel, self._current_pos
+        # )
         # self.class_log.info(f"{pos_msg.timestamp/30000}, {pos_msg.x}, {pos_msg.y}, {pos_msg.y}, {pos_msg.y2}")
         #####################################################################################################
 
