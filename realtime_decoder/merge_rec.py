@@ -7,6 +7,7 @@ import logging
 import logging.config
 import pandas as pd
 import oyaml as yaml
+import numpy as np
 import multiprocessing as mp
 
 from typing import Dict 
@@ -63,6 +64,66 @@ def merge_pandas(filename_items):
         hdf_store[f'rec_{rec_id}'] = merged
 
     hdf5_lock.release()
+
+def merge_timings(config):
+
+    outfile = os.path.join(
+        config['files']['output_dir'],
+        config['files']['prefix'] + '.timings_merged.h5'
+    )
+
+    # since we're opening the file in append mode,
+    # we want to make sure there isn't already
+    # existing data
+    if os.path.isfile(outfile):
+        raise Exception(
+            f"Merged timings file {outfile} already exists"
+        )
+
+    # find the encoder files
+    prefix = config['files']['prefix']
+    postfix = config['files']['timing_postfix']
+    filelist = glob.glob(
+        os.path.join(
+            config['files']['output_dir'],
+            f'{prefix}*encoder_*{postfix}.npz'
+        )
+    )
+
+    for file in filelist:
+        trode = file.rstrip(f'.{postfix}.npz').split('_')[-1]
+        dec_file = glob.glob(
+            os.path.join(
+                config['files']['output_dir'],
+                f'{prefix}*decoder_trode_{trode}.{postfix}.npz'
+            )
+        )[0]
+
+        with np.load(file) as f:
+            df1 = pd.DataFrame(f['timings'])
+
+        with np.load(dec_file) as f:
+            df2 = pd.DataFrame(f['timings'])
+
+        df = df1.merge(df2)
+        with pd.HDFStore(outfile, 'a') as hdf_store:
+            hdf_store[f'trode_{trode}'] = df
+
+    # now do the standalone decoder files
+    filelist = glob.glob(
+        os.path.join(
+            config['files']['output_dir'],
+            f'{prefix}*decoder_rank_*{postfix}.npz'
+        )
+    )
+
+    for file in filelist:
+        rank = file.rstrip(f'.{postfix}.npz').split('_')[-1]
+        with np.load(file) as f:
+            df = pd.DataFrame(f['timings'])
+
+        with pd.HDFStore(outfile, 'a') as hdf_store:
+            hdf_store[f'dec_rank_{rank}'] = df
 
 def copy_to_backup(config):
 
@@ -168,6 +229,9 @@ def merge_with_temp(config, numprocs):
             except FileNotFoundError:
                 pass
 
+    logger.info("Merging timing info..")
+    merge_timings(config)
+
     logger.info("Copying files to backup location...")
 
     copy_to_backup(config)
@@ -175,7 +239,7 @@ def merge_with_temp(config, numprocs):
     t2 = time.time()
 
     logger.info(
-        f"Took {(t1 - t0)/60:0.3f} minutes to merge record files"
+        f"Took {(t1 - t0)/60:0.3f} minutes to merge files"
     )
     logger.info(
         f"Took {(t2 - t1)/60:0.3f} minutes to remove temp files and "
