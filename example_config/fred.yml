@@ -62,6 +62,9 @@ sampling_rate:
   lfp: 1500
   position: 30
 ripples:
+  max_ripple_samples: 450
+  vel_thresh: 10
+  freeze_stats: false
   filter:
     type: 'iir'
     order: 2
@@ -77,44 +80,46 @@ ripples:
     num_taps: 15
     band_edges: [50, 55]
     desired: [1, 0]
-  staircase_estimator: true
-  power_envelope: true
-  winsize: 6
   threshold: # units: number of standard deviations above the mean
     standard: 3.5
     conditioning: 3.75
     content: 4
     end: 0
-  max_ripple_samples: 450
-  vel_thresh: 10
-  freeze_stats: false
+  # custom_mean:
+  #   1: 1
+  #   consensus: 2
+  # custom_std:
+  #   1: 2
+  #   consensus: 3
 encoder:
   spk_amp: 200 # fred specific
   mark_dim: 4
+  bufsize: 50000
+  timings_bufsize: 50000
+  vel_thresh: 10
+  num_pos_points: 15
   position: # fred specific
     lower: 0
     upper: 41
     num_bins: 41
     arm_ids: [0,0,1,2]
     arm_coords: [[0,8],[13,24],[29,40]]
-  vel_thresh: 10
-  num_pos_points: 15
   mark_kernel:
     mean: 0
     std: 20
     use_filter: false  # fred specific
     n_std: 1
     n_marks_min: 10
-  bufsize: 50000
-  timings_bufsize: 50000
+  # dead_channels:
+  #   1: [0, 1]
 decoder:
   bufsize: 2000
   timings_bufsize: 50000
   cred_int_bufsize: 10
+  num_pos_points: 15
   time_bin:
     samples: 180 # reference sampling rate is spike sampling rate
     delay_samples: 180 # reference sampling rate is spike sampling rate
-  num_pos_points: 15
 clusterless_decoder:
   state_labels: ['state']
   transmat_bias: 1
@@ -124,10 +129,9 @@ gui:
   refresh_rate: 25 # Hz
   trace_length: 2 # seconds
   state_colors: ['#4c72b0','#dd8452', '#55a868']
-  velocity_color: '#4c72b0'
   num_xticks: 5
 stimulation:
-  instructive: true
+  instructive: false
   shortcut_msg_on: true
   num_pos_points: 150
   center_well_loc: [638,653] # camera coordinates
@@ -148,8 +152,8 @@ stimulation:
     enabled: true
     type: "standard"
     method: "multichannel"
-    event_lockout: 0.2
-    num_above_thresh: 4
+    event_lockout: 0
+    num_above_thresh: 1
   head_direction:
     enabled: true
     rotate_180: true
@@ -168,7 +172,7 @@ cred_interval:
   val: 0.5
   max_num: 5
 display:
-  main:
+  stim_decider:
     position: 150
   ripples:
     lfp: 100000
