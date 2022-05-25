@@ -630,9 +630,9 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._spk_counters[trode]['encoding'] = 0
 
             try:
-                if trode in self._config['encoder']['dead_channels']:
-                    dch = self._config['encoder']['dead_channels'][trode]
-                    self._dead_channels[trode] = dch
+                dch = self._config['encoder']['dead_channels'][trode]
+                self._dead_channels[trode] = dch
+                self.class_log.info(f"Set dead channels for trode {trode}")
             except KeyError:
                 pass
 

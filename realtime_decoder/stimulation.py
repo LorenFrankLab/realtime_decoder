@@ -945,7 +945,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         # self.p['reward_mode'] = self._config['stimulation']['reward_mode']
         # self.p['shortcut_msg_on'] = self._config['stimulation']['shortcut_msg_on']
         self.p['num_pos_points'] = self._config['stimulation']['num_pos_points']
-        self.p['num_pos_disp'] = self._config['display']['main']['position']
+        self.p['num_pos_disp'] = self._config['display']['stim_decider']['position']
         self.p['max_center_well_dist'] = self._config['stimulation']['max_center_well_dist']
         self.p['arm_coords'] = self._config['encoder']['position']['arm_coords']
 
