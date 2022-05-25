@@ -68,7 +68,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                  'delay', 'velocity', 'mapped_pos', 'task_state',
                  'posterior_max_arm', 'target_arm', 'content_threshold',
                  'max_arm_repeats', 'replay_window_time', 'is_instructive',
-                 'unique_trodes', 'center_well_dist', 'max_center_well_dist'] +
+                 'unique_trodes', 'center_well_dist', 'max_center_well_dist',
+                 'standard_ripple', 'cond_ripple', 'content_ripple',
+                 'standard_ripple_consensus', 'cond_ripple_consensus',
+                 'content_ripple_consensus'] +
                  spike_count_labels + event_spike_count_labels +
                  avg_spike_rate_labels + credible_int_labels + region_labels +
                  base_labels + arm_labels,
@@ -82,7 +85,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                  'num_above_thresh']
             ],
             rec_formats=[
-                'qq?dddiiidid?qdd' +
+                'qq?dddiiidid?qdd??????' +
                 'q'*len(spike_count_labels) +
                 'q'*len(event_spike_count_labels) +
                 'd'*len(avg_spike_rate_labels) +
@@ -561,11 +564,11 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         # add new posterior/likelihood probability sums for desired regions
         # perhaps we want to compute probability sum for box eventually?
-        self._region_ps_buff[ind, self._dd_ind, 0] = 0
+        self._region_ps_buff[ind, self._dd_ind, 0] = np.nan
         self._region_ps_buff[ind, self._dd_ind, 1] = ps_arm1
         self._region_ps_buff[ind, self._dd_ind, 2] = ps_arm2
 
-        self._region_ps_base_buff[ind, self._dd_ind, 0] = 0
+        self._region_ps_base_buff[ind, self._dd_ind, 0] = np.nan
         self._region_ps_base_buff[ind, self._dd_ind, 1] = ps_arm1_base
         self._region_ps_base_buff[ind, self._dd_ind, 2] = ps_arm2_base
 
@@ -715,7 +718,13 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self.p_replay['primary_arm_threshold'], self._max_repeats,
             self._replay_window_time, self.p['instructive'],
             num_unique, self._center_well_dist,
-            self.p['max_center_well_dist'], *self._spike_count,
+            self.p['max_center_well_dist'],
+            self._is_in_multichannel_ripple['standard'],
+            self._is_in_multichannel_ripple['cond'],
+            self._is_in_multichannel_ripple['content'],
+            self._is_in_consensus_ripple['standard'],
+            self._is_in_consensus_ripple['cond'],
+            self._is_in_consensus_ripple['content'], *self._spike_count,
             *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
             *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
             *self._region_ps_buff.mean(axis=1).flatten(),
@@ -807,7 +816,13 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self.p_replay['primary_arm_threshold'], self._max_repeats,
             self._replay_window_time, self.p['instructive'],
             num_unique, self._center_well_dist,
-            self.p['max_center_well_dist'], *self._spike_count,
+            self.p['max_center_well_dist'],
+            self._is_in_multichannel_ripple['standard'],
+            self._is_in_multichannel_ripple['cond'],
+            self._is_in_multichannel_ripple['content'],
+            self._is_in_consensus_ripple['standard'],
+            self._is_in_consensus_ripple['cond'],
+            self._is_in_consensus_ripple['content'], *self._spike_count,
             *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
             *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
             *self._region_ps_buff.mean(axis=1).flatten(),
