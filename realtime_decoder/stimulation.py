@@ -114,6 +114,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             dtype='=i4'
         )
 
+        self._decoder_count = [0] * num_decoders
+
         self._pos_msg_ct = 0
         self._current_pos = 0
         self._current_vel = 0
@@ -340,8 +342,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 'segment', msg[0]['segment'],
                 'raw_x', msg[0]['raw_x'], 'raw_y', msg[0]['raw_y'],
                 'angle', np.around(self._head_angle, decimals=2),
-                'angle_well1', np.around(self._angle_well_1, decimals=1),
-                'angle_well2', np.around(self._angle_well_2, decimals=1)
+                'angle_well_1', np.around(self._angle_well_1, decimals=1),
+                'angle_well_2', np.around(self._angle_well_2, decimals=1)
             )
 
     def _update_head_direction(self, msg):
@@ -490,8 +492,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def _update_posterior(self, msg):
 
+        # set various indices and counts
         self._dec_ind = self._decoder_rank_ind_map[msg[0]['rank']]
+        self._dd_ind = self._dd_inds[self._dec_ind]
+        self._decoder_count[self._dec_ind] += 1
 
+        # run data processing methods
         self._update_spike_stats(msg)
         self._update_decode_stats(msg)
 
@@ -500,7 +506,11 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         else:
             self._find_replay(msg)
 
-        self._dd_ind = (self._dd_ind + 1) % self.p_replay['sliding_window']
+        # advance the relevant decoder data index
+        self._dd_inds[self._dec_ind] = (
+            (self._dd_inds[self._dec_ind] + 1) %
+            self.p_replay['sliding_window']
+        )
 
     def _update_spike_stats(self, msg):
 
@@ -511,6 +521,13 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._event_spike_count[ind, self._dd_ind] = msg[0]['spike_count']
 
         self._update_bin_firing_rate(ind, msg)
+
+        if self._decoder_count[ind] % self.p['num_dec_disp'] == 0:
+            print(
+                'Decoder', ind, 'firing rate:',
+                '(mean:', np.around(self._bin_fr_means[ind], decimals=3),
+                'std:', np.around(self._bin_fr_std[ind], decimals=3), ')',
+            )
 
     def _update_bin_firing_rate(self, ind, msg):
 
@@ -524,7 +541,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self._bin_fr_M2[ind],
             self._bin_fr_N[ind]
         )
-        self._bin_fr_std[ind] = self._bin_fr_M2[ind] / self._bin_fr_N[ind]
+        self._bin_fr_std[ind] = np.sqrt(
+            self._bin_fr_M2[ind] / self._bin_fr_N[ind]
+        )
 
     def _update_decode_stats(self, msg):
 
@@ -908,7 +927,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         num_decoders = self._num_decoders
 
         self._dec_ind = 0 # decoder index of current posterior message
-        self._dd_ind = 0 # shorthand for decode data
+        self._dd_inds = [0] * num_decoders # shorthand for decode data
 
         # dim 2 is 3 because 3 regions - box, arm1, arm2
         # _ps_ - shorthand for probability sum
@@ -946,6 +965,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         # self.p['shortcut_msg_on'] = self._config['stimulation']['shortcut_msg_on']
         self.p['num_pos_points'] = self._config['stimulation']['num_pos_points']
         self.p['num_pos_disp'] = self._config['display']['stim_decider']['position']
+        self.p['num_dec_disp'] = self._config['display']['stim_decider']['decoding_bins']
         self.p['max_center_well_dist'] = self._config['stimulation']['max_center_well_dist']
         self.p['arm_coords'] = self._config['encoder']['position']['arm_coords']
 
