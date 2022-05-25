@@ -128,6 +128,33 @@ class GenericGuiRecvInterface(base.MPIRecvInterface):
                 tag=self._msg_tag
             )
 
+class ArmEventsRecvInterface(base.MPIRecvInterface):
+
+    def __init__(self, comm, rank, config, msg_handler):
+        super().__init__(comm, rank, config)
+        self._msg_handler = msg_handler
+        self._msg_buffer = np.zeros(
+            len(config['encoder']['position']['arm_coords']),
+            dtype='=i4'
+        )
+        self._mpi_status = MPI.Status()
+        self._req = self.comm.Irecv(
+            buf=self._msg_buffer,
+            tag=messages.MPIMessageTag.ARM_EVENTS
+        )
+
+    def receive(self):
+        rdy = self._req.Test(status=self._mpi_status)
+        if rdy:
+            self._msg_handler.handle_message(
+                self._msg_buffer, self._mpi_status
+            )
+            self._req = self.comm.Irecv(
+                buf=self._msg_buffer,
+                tag=messages.MPIMessageTag.ARM_EVENTS
+            )
+
+
 ####################################################################################
 # Qt Classes
 ####################################################################################
@@ -1201,14 +1228,9 @@ class DecodingResultsWindow(QMainWindow):
             messages.MPIMessageTag.DROPPED_SPIKES, self
         )
 
-        # self._arm_events_interface = base.StandardMPIRecvInterface(
-        #     comm, rank, config,
-        #     messages.MPIMessageTag.GUI_ARM_EVENTS, self
-        # )
-        # self._rewards_interface = base.StandardMPIRecvInterface(
-        #     comm, rank, config,
-        #     messages.MPIMessageTag.GUI_REWARDS, self
-        # )
+        self._arm_events_interface = ArmEventsRecvInterface(
+            comm, rank, config, self
+        )
 
     def _init_plots(self):
 
@@ -1427,10 +1449,7 @@ class DecodingResultsWindow(QMainWindow):
     def _update(self):
         self._command_interface.receive()
         self._posterior_interface.receive()
-        #####################################################################################################
-        # self._arm_events_interface.receive()
-        # self._rewards_interface.receive()
-        #####################################################################################################
+        self._arm_events_interface.receive()
         self._dropped_spikes_interface.receive()
 
         if self._elapsed_timer.elapsed() > self._refresh_msec:
@@ -1490,6 +1509,8 @@ class DecodingResultsWindow(QMainWindow):
             self._update_lk_post_data(msg, mpi_status)
         elif mpi_status.tag == messages.MPIMessageTag.DROPPED_SPIKES:
             self._update_dropped_spikes(msg, mpi_status)
+        elif mpi_status.tag == messages.MPIMessageTag.ARM_EVENTS:
+            self._update_arm_events(msg, mpi_status)
         else:
             self._class_log.warning(
                 f"Received message of type {type(msg)} "
@@ -1535,16 +1556,9 @@ class DecodingResultsWindow(QMainWindow):
 
     def _update_arm_events(self, msg, mpi_status):
 
-        ##############################################################################################################
-        # Implement
-        ##############################################################################################################
-        self._update_status_bar()
-
-    def _update_rewards(self, msg, mpi_status):
-
-        ##############################################################################################################
-        # Implement
-        ##############################################################################################################
+        for ii, num_events in enumerate(msg):
+            self._sbdata['arm_events'][ii] = num_events
+        self._sbdata['rewards_delivered'] = np.sum(msg)
         self._update_status_bar()
 
     def _update_status_bar(self):
@@ -1559,9 +1573,9 @@ class DecodingResultsWindow(QMainWindow):
             self._decoder_rank_ind_map.keys(),
             self._sbdata['dropped_spikes']
         ):
-            sb_string += f"(Rank {rank}: {pct:.3f}%)"
+            sb_string += f"(Rank {rank}: {pct:.3f}%), "
 
-        sb_string += f", Num Rewards: {self._sbdata['rewards_delivered']}"
+        sb_string += f"Tot. Rewards: {self._sbdata['rewards_delivered']}"
 
         self.statusBar().showMessage(sb_string)
 

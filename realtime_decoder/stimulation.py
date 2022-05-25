@@ -5,9 +5,27 @@ from copy import deepcopy
 
 from realtime_decoder import base, utils, messages, binary_record
 
+class StimDeciderSendInterface(base.MPISendInterface):
+
+    def __init__(self, comm, rank, config):
+        super().__init__(comm, rank, config)
+
+    def send_num_rewards(self, num_rewards_arr):
+        self.comm.Send(
+            buf=num_rewards_arr,
+            dest=self.config['rank']['gui'][0],
+            tag=messages.MPIMessageTag.ARM_EVENTS
+        )
+
+    def send_record_register_messages(self):
+        raise NotImplementedError(
+            f"This class does not send record registration messages "
+            "to the main process"
+        )
+
 class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
-    def __init__(self, rank, config, trodes_client):
+    def __init__(self, comm, rank, config, trodes_client):
 
         super().__init__(
             rank=rank,
@@ -20,6 +38,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 ['timestamp', 'ripple_type', 'is_consensus', 'trigger_trode', 'num_above_thresh']
             ],
             rec_formats=['q10s?ii?', 'q10s?ii'],
+            send_interface=StimDeciderSendInterface(comm, rank, config),
             manager_label='state'
         )
 
@@ -87,10 +106,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         elif mpi_status.tag == messages.MPIMessageTag.VEL_POS:
             self._update_velocity_position(msg)
         elif mpi_status.tag == messages.MPIMessageTag.POSTERIOR:
-            pass
+            # pass
             ###################################################################################################################
             # Implement when ready
-            # self._update_posterior(msg)
+            self._update_posterior(msg)
             ####################################################################################################################
         else:
             self._class_log.warning(
@@ -267,7 +286,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         if (
             self._pos_msg_ct % self.p['num_pos_points'] == 0
         ):
-            self._task_state == utils.get_last_num(
+            self._task_state = utils.get_last_num(
                 self.p['taskstate_file']
             )
 
@@ -524,7 +543,15 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         ts = msg[0]['bin_timestamp_r']
         ind = self._dec_ind
 
-        if ts <= self._replay_event_ts + self._replay_event_ls:
+        num_unique = np.count_nonzero(self._enc_ci_buff)
+
+        # don't even bother looking for replay if the basic requirements
+        # are not met
+        if not (
+            ts > self._replay_event_ts + self._replay_event_ls and
+            num_unique >= self.p_replay['min_unique_trodes'] and
+            self._is_center_well_proximate
+        ):
             return
 
         if self._num_decoders == 2:
@@ -611,26 +638,26 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def _handle_replay(self, arm, msg):
 
-        # assumes already satisfied event lockout criterion.
-        # all these events should therefore be recorded
+        # assumes already satisfied event lockout and minimum unique
+        # trodes criteria. all these events should therefore be recorded
 
         print(f"Replay arm {arm} detected")
 
-        self._replay_event_ts = msg[0]['timestamp']
+        self._replay_event_ts = msg[0]['bin_timestamp_r']
 
         num_unique = np.count_nonzero(self._enc_ci_buff)
         print(f"Unique trodes: {num_unique}")
 
         send_shortcut = self._check_send_shortcut(
             self.p_replay['enabled'] and
-            num_unique > self.p_replay['min_unique_trodes'] and
-            arm == self.p_replay['target_arm'] and
-            self._is_center_well_proximate
+            arm == self.p_replay['target_arm']
         )
 
         if send_shortcut:
-            print(f"Replay arm {arm} rewarded")
             self._trodes_client.send_statescript_shortcut_message(14)
+            self._num_rewards[arm] += 1
+            self.send_interface.send_num_rewards(self._num_rewards)
+            print(f"Replay arm {arm} rewarded")
 
         ############################################################################################
         # write record
@@ -648,8 +675,15 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 "for 2 decoders"
             )
         else:
-            # not out of lockout
-            if ts <= self._replay_event_ts + self._replay_event_ls:
+            num_unique = np.count_nonzero(self._enc_ci_buff)
+
+            # don't even bother looking for replay if the basic requirements are not
+            # met
+            if not (
+                ts > self._replay_event_ts + self._replay_event_ls and
+                num_unique >= self.p_replay['min_unique_trodes'] and
+                self._is_center_well_proximate
+            ):
                 return
 
             arm_thresh = self.p_replay['primary_arm_threshold']
@@ -677,12 +711,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def _handle_replay_instructive(self, arm, msg):
 
-        # assumes already satisfied event lockout criterion.
-        # all these events should therefore be recorded
+        # assumes already satisfied event lockout and minimum unique
+        # trodes criteria. all these events should therefore be recorded
 
         print(f"INSTRUCTIVE: Replay arm {arm} detected")
 
-        self._replay_event_ts = msg[0]['timestamp']
+        self._replay_event_ts = msg[0]['bin_timestamp_r']
 
         num_unique = np.count_nonzero(self._enc_ci_buff)
         print(f"INSTRUCTIVE: Unique trodes: {num_unique}")
@@ -691,18 +725,18 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         send_shortcut = self._check_send_shortcut(
             self.p_replay['enabled'] and
-            outer_arm_visited and
-            num_unique > self.p_replay['min_unique_trodes'] and
             arm == self.p_replay['target_arm'] and
-            self._is_center_well_proximate
+            outer_arm_visited
         )
 
         if send_shortcut:
+            self._trodes_client.send_statescript_shortcut_message(14)
             print(f"INSTRUCTIVE: Replay target arm {arm} rewarded")
             utils.write_text_file(self.p['instructive_file'], 0)
-            self._trodes_client.send_statescript_shortcut_message(14)
             self._instr_rewarded_arms[1:] = self._instr_rewarded_arms[:-1]
             self._instr_rewarded_arms[0] = arm
+            self._num_rewards[arm] += 1
+            self.send_interface.send_num_rewards(self._num_rewards)
             self._choose_next_instructive_target()
 
         ##############################################################################################
