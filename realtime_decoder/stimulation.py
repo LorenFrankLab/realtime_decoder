@@ -27,21 +27,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def __init__(self, comm, rank, config, trodes_client):
 
-        super().__init__(
-            rank=rank,
-            rec_ids=[
-                binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
-                binary_record.RecordIDs.STIM_RIPPLE_END
-            ],
-            rec_labels=[
-                ['timestamp', 'ripple_type', 'is_consensus', 'trigger_trode', 'num_above_thresh', 'shortcut_message_sent'],
-                ['timestamp', 'ripple_type', 'is_consensus', 'trigger_trode', 'num_above_thresh']
-            ],
-            rec_formats=['q10s?ii?', 'q10s?ii'],
-            send_interface=StimDeciderSendInterface(comm, rank, config),
-            manager_label='state'
-        )
-
         num_decoders = len(config['rank']['decoders'])
         if num_decoders > 2:
             raise NotImplementedError(
@@ -55,6 +40,63 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             raise NotImplementedError(
                 "This object only handles a two-arm maze"
             )
+
+        spike_count_labels = [f'spike_count_{x}' for x in range(num_decoders)]
+        event_spike_count_labels = [f'event_spike_count_{x}' for x in range(num_decoders)]
+        avg_spike_rate_labels = [f'avg_spike_rate_{x}' for x in range(num_decoders)]
+        credible_int_labels = [f'credible_int_{x}' for x in range(num_decoders)]
+
+        rls = ['region_box', 'region_arm1', 'region_arm2']
+        region_labels = [f'{rl}_{x}' for x in range(num_decoders) for rl in rls]
+
+        bls = ['base_box', 'base_arm1', 'base_arm2']
+        base_labels = [f'{bl}_{x}' for x in range(num_decoders) for bl in bls]
+
+        armls = ['box', 'arm1', 'arm2']
+        arm_labels = [f'{arml}_{x}' for x in range(num_decoders) for arml in armls]
+
+        super().__init__(
+            rank=rank,
+            rec_ids=[
+                binary_record.RecordIDs.STIM_MESSAGE,
+                binary_record.RecordIDs.STIM_HEAD_DIRECTION,
+                binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
+                binary_record.RecordIDs.STIM_RIPPLE_END
+            ],
+            rec_labels=[
+                ['bin_timestamp_l', 'bin_timestamp_r', 'shortcut_message_sent',
+                 'delay', 'velocity', 'mapped_pos', 'task_state',
+                 'posterior_max_arm', 'target_arm', 'content_threshold',
+                 'max_arm_repeats', 'replay_window_time', 'is_instructive',
+                 'unique_trodes', 'center_well_dist', 'max_center_well_dist'] +
+                 spike_count_labels + event_spike_count_labels +
+                 avg_spike_rate_labels + credible_int_labels + region_labels +
+                 base_labels + arm_labels,
+                ['timestamp', 'shortcut_message_sent', 'well', 'raw_x', 'raw_y',
+                 'raw_x2', 'raw_y2', 'angle', 'angle_well_1', 'angle_well_2',
+                 'well_angle_range', 'within_angle_range', 'center_well_dist',
+                 'max_center_well_dist', 'duration', 'rotated_180'],
+                ['timestamp', 'ripple_type', 'is_consensus', 'trigger_trode',
+                 'num_above_thresh', 'shortcut_message_sent'],
+                ['timestamp', 'ripple_type', 'is_consensus', 'trigger_trode',
+                 'num_above_thresh']
+            ],
+            rec_formats=[
+                'qq?dddiiidid?qdd' +
+                'q'*len(spike_count_labels) +
+                'q'*len(event_spike_count_labels) +
+                'd'*len(avg_spike_rate_labels) +
+                'd'*len(credible_int_labels) +
+                'd'*len(region_labels) +
+                'd'*len(base_labels) +
+                'd'*len(arm_labels),
+                'q?idddddddddddd?',
+                'q10s?ii?',
+                'q10s?ii'
+            ],
+            send_interface=StimDeciderSendInterface(comm, rank, config),
+            manager_label='state'
+        )
 
         self._config = config
         self._trodes_client = trodes_client
@@ -90,7 +132,23 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._well_2_x = well_loc[1][0]
         self._well_2_y = well_loc[1][1]
         self._head_angle = 0
+        self._center_well_dist = 0
         self._is_center_well_proximate = False
+
+        # data variables we record to disk
+        self._delay = (
+            self._config['decoder']['time_bin']['delay_samples'] /
+            self._config['sampling_rate']['spikes']
+        )
+        self._replay_window_time = (
+            self._config['decoder']['time_bin']['samples'] /
+            self._config['sampling_rate']['spikes'] *
+            self._config['stimulation']['replay']['sliding_window']
+        )
+        if self._config['stimulation']['instructive']:
+            self._max_repeats = self.p_replay['instr_max_repeats']
+        else:
+            self._max_repeats = -1 # currently no restriction
 
         self._init_stim_params()
         self._init_data_buffers()
@@ -106,11 +164,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         elif mpi_status.tag == messages.MPIMessageTag.VEL_POS:
             self._update_velocity_position(msg)
         elif mpi_status.tag == messages.MPIMessageTag.POSTERIOR:
-            # pass
-            ###################################################################################################################
-            # Implement when ready
             self._update_posterior(msg)
-            ####################################################################################################################
         else:
             self._class_log.warning(
                 f"Received message of type {type(msg)} "
@@ -174,12 +228,11 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
                         self._ripple_timestamps[rt] = [] # reset vector of timestamps
                         self._is_in_multichannel_ripple[rt] = False
-                        #######################################################################################
-                        # log end of ripple, trigger trode, rtype
-                        #######################################################################################
+
                         self.write_record(
                             binary_record.RecordIDs.STIM_RIPPLE_END,
-                            ts, bytes(rt, 'utf-8'), False, trode, self.p_ripples['num_above_thresh']
+                            ts, bytes(rt, 'utf-8'), False, trode,
+                            self.p_ripples['num_above_thresh']
                         )
 
         else: # must be a ripple onset message
@@ -199,10 +252,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     assert len(self._ripple_trodes[rtype]) == self.p_ripples['num_above_thresh']
 
                     self._is_in_multichannel_ripple[rtype] = True
-
-                    #####################################################################################################################
-                    # log ripple message - trigger trode, trodes contributing to ripple, timestamps, etc.
-                    #####################################################################################################################
                     self._ripple_event_ts[rtype] = ts
 
                     send_shortcut_message = self._check_send_shortcut(
@@ -213,10 +262,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                         )
                     )
                     if send_shortcut_message:
-                        pass
-                        #################################################################################################################
-                        # send shortcut message
-                        #################################################################################################################
+                        self._trodes_client.send_statescript_shortcut_message(14)
+
                     self.write_record(
                         binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
                         ts, bytes(rtype, 'utf-8'), False, trode,
@@ -230,18 +277,17 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         rtype = msg[0]['ripple_type']
 
         if rtype == 'end':
-            #############################################################################################################################
+
             for rt in self._is_in_consensus_ripple:
 
                 if self._is_in_consensus_ripple[rt]:
+
                     self.write_record(
                         binary_record.RecordIDs.STIM_RIPPLE_END,
                         ts, bytes(rt, 'utf-8'), True,
                         -1, -1
                     )
                     self._is_in_consensus_ripple[rt] = False
-            # log ripple end
-            #############################################################################################################################
 
         else: # must be start
 
@@ -250,9 +296,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 ts > self._cons_ripple_event_ts[rtype] + self._cons_ripple_event_ls
             ):
 
-                #########################################################################################################################
-                # log ripple started
-                #########################################################################################################################
                 self._cons_ripple_event_ts[rtype] = ts
                 self._is_in_consensus_ripple[rtype] = True
 
@@ -263,11 +306,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                         self.p_ripples['method'] == 'consensus'
                     )
                 )
+
                 if send_shortcut_message:
-                    pass
-                    ####################################################################################################################
-                    # send shortcut message
-                    ###################################################################################################################
+                    self._trodes_client.send_statescript_shortcut_message(14)
+
                 self.write_record(
                     binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
                     ts, bytes(rtype, 'utf-8'), True,
@@ -283,9 +325,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         self._update_head_direction(msg)
 
-        if (
-            self._pos_msg_ct % self.p['num_pos_points'] == 0
-        ):
+        if self._pos_msg_ct % self.p['num_pos_points'] == 0:
             self._task_state = utils.get_last_num(
                 self.p['taskstate_file']
             )
@@ -297,8 +337,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 'segment', msg[0]['segment'],
                 'raw_x', msg[0]['raw_x'], 'raw_y', msg[0]['raw_y'],
                 'angle', np.around(self._head_angle, decimals=2),
-                f'angle_well1 {self._angle_well_1:0.2f} ',
-                f'angle_well2 {self._angle_well_2:0.2f}'
+                'angle_well1', np.around(self._angle_well_1, decimals=1),
+                'angle_well2', np.around(self._angle_well_2, decimals=1)
             )
 
     def _update_head_direction(self, msg):
@@ -328,7 +368,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         x = (msg[0]['raw_x'] + msg[0]['raw_x2'])/2
         y = (msg[0]['raw_y'] + msg[0]['raw_y2'])/2
-        dist = np.sqrt(
+        self._center_well_dist = np.sqrt(
             (x - self._center_well_loc[0])**2 + (y - self._center_well_loc[1])**2
         ) * self.p['scale_factor']
 
@@ -336,7 +376,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         # whether the animal is CURRENTLY near the center well. to be accurate,
         # it is important to minimize the decoder delay i.e.
         # config['decoder']['time_bin']['delay_samples']
-        self._is_center_well_proximate = dist <= self.p['max_center_well_dist']
+        self._is_center_well_proximate = self._center_well_dist <= self.p['max_center_well_dist']
 
         ts = msg[0]['timestamp']
 
@@ -364,9 +404,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             if abs(angle - angle_well_1) <= self.p_head['well_angle_range']:
 
                 print(
-                    "Head direction event arm 1", angle,
-                    np.around(ts/30000, decimals=2),
-                    "angle to target", angle_well_1
+                    "Head direction event arm 1", np.around(angle, decimals=2),
+                    "at time", np.around(ts/30000, decimals=2),
+                    "angle to target", np.around(angle_well_1, decimals=2)
                 )
                 well = 1
                 record = True
@@ -378,9 +418,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             if abs(angle - angle_well_2) <= self.p_head['well_angle_range']:
 
                 print(
-                    "Head direction event arm 2", angle,
-                    np.around(ts/30000, decimals=2),
-                    "angle to target", angle_well_2
+                    "Head direction event arm 2", np.around(angle, decimals=2),
+                    "at time", np.around(ts/30000, decimals=2),
+                    "angle to target", np.around(angle, deicmals=2)
                 )
                 well = 2
                 record = True
@@ -388,17 +428,25 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     self.p_head['enabled']
                 )
 
+            if send_shortcut_message:
+                self._trodes_client.send_statescript_shortcut_message(14)
+
             if record:
                 self._head_event_ts = ts
-                ############################################################################################################
-                # record head stim message
-                #############################################################################################################
+                self.write_record(
+                    binary_record.RecordIDs.STIM_HEAD_DIRECTION,
+                    ts, send_shortcut_message, well,
+                    msg[0]['raw_x'], msg[0]['raw_y'],
+                    msg[0]['raw_x2'], msg[0]['raw_y2'],
+                    angle, angle_well_1, angle_well_2,
+                    self.p_head['well_angle_range'],
+                    self.p_head['within_angle_range'],
+                    self._center_well_dist,
+                    self.p['max_center_well_dist'],
+                    self.p_head['min_duration'],
+                    self.p_head['rotate_180']
+                )
 
-            if send_shortcut_message:
-                pass
-                ############################################################################################################
-                # send shortcut message
-                ############################################################################################################
 
     def _compute_angles(self, msg):
         x1 = msg[0]['raw_x']
@@ -659,10 +707,21 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self.send_interface.send_num_rewards(self._num_rewards)
             print(f"Replay arm {arm} rewarded")
 
-        ############################################################################################
-        # write record
-        ############################################################################################
-
+        self.write_record(
+            binary_record.RecordIDs.STIM_MESSAGE,
+            msg[0]['bin_timestamp_l'], msg[0]['bin_timestamp_r'],
+            send_shortcut, self._delay, self._current_vel, self._current_pos,
+            self._task_state, arm, self.p_replay['target_arm'],
+            self.p_replay['primary_arm_threshold'], self._max_repeats,
+            self._replay_window_time, self.p['instructive'],
+            num_unique, self._center_well_dist,
+            self.p['max_center_well_dist'], *self._spike_count,
+            *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
+            *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
+            *self._region_ps_buff.mean(axis=1).flatten(),
+            *self._region_ps_base_buff.mean(axis=1).flatten(),
+            *self._arm_ps_buff.mean(axis=1).flatten()
+        )
 
     def _find_replay_instructive(self, msg):
 
@@ -739,9 +798,22 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self.send_interface.send_num_rewards(self._num_rewards)
             self._choose_next_instructive_target()
 
-        ##############################################################################################
-        # write record
-        ##############################################################################################
+        self.write_record(
+            binary_record.RecordIDs.STIM_MESSAGE,
+            msg[0]['bin_timestamp_l'], msg[0]['bin_timestamp_r'],
+            send_shortcut, self._delay,
+            self._current_vel, self._current_pos,
+            self._task_state, arm, self.p_replay['target_arm'],
+            self.p_replay['primary_arm_threshold'], self._max_repeats,
+            self._replay_window_time, self.p['instructive'],
+            num_unique, self._center_well_dist,
+            self.p['max_center_well_dist'], *self._spike_count,
+            *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
+            *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
+            *self._region_ps_buff.mean(axis=1).flatten(),
+            *self._region_ps_base_buff.mean(axis=1).flatten(),
+            *self._arm_ps_buff.mean(axis=1).flatten()
+        )
 
     def _choose_next_instructive_target(self):
 
@@ -811,7 +883,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._angle_buffer = np.ones(div) * -1000
         self._angle_buffer_ind = 0
 
-        # generate the lookup mapping
+        # generate the lookup mapping. doesn't need to be an OrderedDict
         self._decoder_rank_ind_map = {} # key: rank, value: index
         for ii, rank in enumerate(self._config['rank']['decoders']):
             self._decoder_rank_ind_map[rank] = ii
@@ -845,8 +917,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self._config['sampling_rate']['spikes']
         )
 
-        self._spike_count = np.zeros(num_decoders)
-        self._event_spike_count = np.zeros((num_decoders, N))
+        self._spike_count = np.zeros(num_decoders, dtype=int)
+        self._event_spike_count = np.zeros((num_decoders, N), dtype=int)
 
     def _init_params(self):
 
