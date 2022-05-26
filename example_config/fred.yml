@@ -97,7 +97,7 @@ encoder:
   bufsize: 50000
   timings_bufsize: 50000
   vel_thresh: 10
-  num_pos_points: 15
+  num_pos_points: 150
   position: # fred specific
     lower: 0
     upper: 41
@@ -116,7 +116,7 @@ decoder:
   bufsize: 2000
   timings_bufsize: 50000
   cred_int_bufsize: 10
-  num_pos_points: 15
+  num_pos_points: 150
   time_bin:
     samples: 180 # reference sampling rate is spike sampling rate
     delay_samples: 180 # reference sampling rate is spike sampling rate
