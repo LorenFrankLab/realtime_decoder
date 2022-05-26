@@ -63,7 +63,7 @@ How many messages the main/supervisor process should send to notify the GUI proc
 If ```true```, pre-existing encoding models are used. If ```false```, encoding models are built on-the-fly as data are streamed.
 
 ## ```frozen_model```
-Whether encoding models should be allowed to expand. If ```false```, new spikes *may* be added to the models. If ```true```, new spikes are *guaranteed not* to be added to the models.
+Whether encoding models should be allowed to expand. If ```false```, new spikes *may* be added to the models. If ```true```, new spikes are *guaranteed not* to be added to the models. This option may be toggled on and off by the GUI.
 
 ## ```files```
 
@@ -71,11 +71,11 @@ Whether encoding models should be allowed to expand. If ```false```, new spikes 
 
 ```backup_dir```: Optional. If specified, the directory in which critical files should be copied to.
 
-```prefix```: The file prefix for the output files
+```prefix```: The file prefix for the output files.
 
-```rec_postfix```: The postfix for binary record files
+```rec_postfix```: The postfix for binary record files.
 
-```timing_postfix```: The postfix for timing files
+```timing_postfix```: The postfix for timing files.
 
 ```saved_model_dir```: The directory that contains the encoding model to be used. Only used if ```preloaded_model``` is ```true```.
 
@@ -101,9 +101,9 @@ Configuration options specific to the [Trodes](https://bitbucket.org/mkarlsso/tr
 
 ## ```ripples```
 
-```max_ripple_samples```: Maximum number of samples that a ripple should be allowed to consist of. A value of 450 (300 ms with a 1500 Hz LFP sampling rate) is reasonable.
+```max_ripple_samples```: Maximum number of samples that a ripple should be allowed to consist of. For example, a value of 450 with a LFP sampling rate of 1500 Hz is 300 ms, a reasonable amount.
 
-```vel_thresh```: Maximum velocity (in cm/s) allowed for a ripple detection.
+```vel_thresh```: Maximum velocity allowed for a ripple detection. Units are cm/s.
 
 ```freeze_stats```: Whether to continuously update the mean and standard deviation of the ripple envelope estimate. If ```true```,continuous updating is disabled. This option may be toggled on and off by the GUI.
 
@@ -119,7 +119,7 @@ For an IIR filter:
 
 ```crit_freqs```: A list of length 2 marking the ripple band cutoff frequencies, in Hz.
 
-```kwargs```: Keyword arguments passed directly to ```scipy```'s ```iirfilter()``` method
+```kwargs```: Keyword arguments passed directly to ```scipy```'s ```iirfilter()``` method.
 
 For a FIR filter:
 
@@ -177,13 +177,13 @@ This entire section is also optional and similar to the ```custom_mean``` sectio
 
 ```timings_bufsize```: Similar to ```bufsize``` above, except this is the initial number of elements the timings array can hold.
 
-```vel_thresh```: Minimum speed the animal must be at for a spike to be added to an encoding model.
+```vel_thresh```: Minimum speed the animal must be at for a spike to be added to an encoding model. Units are cm/s.
 
 ```num_pos_points```: Read the ```taskstate_file```, if it is specified, every ```num_pos_points``` number of position data points. For example, if the ```position``` sampling rate is 30 Hz, and this value is 15, then the ```taskstate_file``` would be read every 0.5 seconds.
 
 ### ```position```
 
-```lower```: The lower edge value of the position bins.
+```lower```: The lower edge value of the position bins. Currently this value must be 0.
 
 ```upper```: The upper edge value of the position bins.
 
@@ -195,11 +195,11 @@ This entire section is also optional and similar to the ```custom_mean``` sectio
 
 ### ```mark_kernel```
 
-```mean```: Not currenty used.
+```mean```: Not currently used.
 
 ```std```: The standard value of the Gaussian kernel evaluated on the distance between a candidate spike and the other spikes in the encoding model.
 
-```use_filter```: If ```true```, a ```mark_dim``` n-cube is drawn around a candidate mark. If there are enough marks in the n-cube, the mark-position joint probability estimate is computed. Otherwise, the spike is not "decoded". If ```use_filter``` is ```false```, every spike is decoded.
+```use_filter```: If ```true```, a ```mark_dim``` n-cube is drawn around a candidate mark. If there are enough marks in the n-cube, the mark-position joint probability estimate is computed. Otherwise, the spike is not decoded. If ```use_filter``` is ```false```, every spike is decoded.
 
 ```n_std```: Ony used if ```use_filter``` is ```true```. For each dimension x of a candidate spike mark, the search area consists of mark_<dimension_x> +/- ```n_std``` * ```std```.
 
@@ -255,7 +255,9 @@ Options used if ```algorithm``` is "clusterless_decoder".
 
 ## ```stimulation```
 
-Note: These parameters are specific to whatever custom stimulation decider you are using. This documentation is relevant to the TwoArmTrodesStimDecider in stimulation.py
+Note: These parameters are specific to whatever custom stimulation decider you are using. Different stim deciders may use different options, and it is up to the user to handle this.
+
+The documentation below is relevant to the TwoArmTrodesStimDecider, a ready-to-use class implemented in stimulation.py
 
 ```instructive```: Whether the data is coming from an instructive task.
 
@@ -263,7 +265,7 @@ Note: These parameters are specific to whatever custom stimulation decider you a
 
 ```center_well_location```: An array consisting of the center well location, in pixels.
 
-```max_center_well_dist```: Used for determining candidate replay and head direction events. The current position of the animal can not exceed this value for every candidate event. Units are in cm.
+```max_center_well_dist```: Used for determining candidate replay and head direction events. For every candidate event, the current distance of the animal from the center well can not exceed this value. Units are in cm.
 
 ### ```replay```
 
@@ -311,21 +313,21 @@ Parameters relevant to replay detection.
 
 ```event_lockout```: Minimum number of time imposed between successive candidate head direction events. Units are in seconds.
 
-```min_duration```: Determines the observation period for detecting candidate head direction events. It is analogous to the sliding window for replay detection.
+```min_duration```: Determines the observation period for detecting candidate head direction events. It is analogous to the sliding window for replay detection. Units are in seconds.
 
-```well_angle_range```: For every candidate head direction event, the head direction vector must be within the angle to a reward well +/- this value.
+```well_angle_range```: For every candidate head direction event, the head direction vector must be within the angle to a reward well +/- this value. Units are in degrees.
 
-```within_angle_range```: For every candidate head direction event, the range R of head direction vector angles is taken over the observation period determined by ```min_duration```. R must not exceed the value of ```within_angle_range```.
+```within_angle_range```: For every candidate head direction event, the range R of head direction vector angles is taken over the observation period determined by ```min_duration```. R must not exceed the value of ```within_angle_range```. Units are in degrees.
 
 ```wells_locs```: An array of x and y locations for each reward well. Units are in pixels.
 
 ## ```kinematics```
 
-```smooth_x```: Whether to smooth the x position
+```smooth_x```: Whether to smooth the x position.
 
-```smooth_x```: Whether to smooth the y position
+```smooth_x```: Whether to smooth the y position.
 
-```smooth_speed```: Whether to smooth the speed
+```smooth_speed```: Whether to smooth the speed.
 
 ```smoothing_filter```: An array containing the smoothing filter coefficients.
 
