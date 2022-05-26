@@ -549,7 +549,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         ind = self._dec_ind
 
-        if self.p_replay['method'] == 'map':
+        if self.p_replay['method'] == 'posterior':
             marginal_prob = msg[0]['posterior'].sum(axis=0)
             ci_decoder = msg[0]['cred_int_post']
         else: # use likelihood
@@ -971,7 +971,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         # verify some inputs
         replay_method = self._config['stimulation']['replay']['method']
-        if replay_method not in ('map', 'ml'):
+        if replay_method not in ('posterior', 'likelihood'):
             raise ValueError(
                 f"Invalid method {replay_method} for replay"
             )

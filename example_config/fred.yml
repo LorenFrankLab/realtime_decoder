@@ -138,7 +138,7 @@ stimulation:
   max_center_well_dist: 17
   replay:
     enabled: true
-    method: "map"
+    method: "posterior"
     target_arm: 1
     event_lockout: 0.2
     sliding_window: 5 # number of decoder time bins
