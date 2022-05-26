@@ -362,7 +362,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._duplicate_spikes = 0
 
         self._task_state = 1
-        self._not_task_1_ct = 0
+        self._save_early = True
 
         self._spike_msg_ct = 0
 
@@ -556,8 +556,6 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         ):
 
             self._task_state = utils.get_last_num(self.p['taskstate_file'])
-            if self._task_state != 1:
-                self._not_task_1_ct += 1
 
         # calculate velocity using the midpoints
         xmid = (pos_msg.x + pos_msg.x2)/2
@@ -590,10 +588,11 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._current_pos, update_occupancy
         )
 
-        if self._not_task_1_ct == 1:
+        if self._task_state != 1 and self._save_early:
             # we also save decoder at the end of the program,
             # but we do it here as well just to be safe
             self._decoder.save_occupancy()
+            self._save_early = False
 
         # write record
         self.write_record(

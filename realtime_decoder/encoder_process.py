@@ -301,7 +301,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._times_ind = {}
 
         self._task_state = 1
-        self._not_task_1_ct = 0
+        self._save_early = True
 
         self._pos_counter = 0
         self._current_pos = 0
@@ -501,8 +501,6 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         ):
 
             self._task_state = utils.get_last_num(self.p['taskstate_file'])
-            if self._task_state != 1:
-                self._not_task_1_ct += 1
 
         #################################################################################################################
         # debugging, remove when done
@@ -540,10 +538,11 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         update_occupancy = self._is_training_epoch()
         for encoder in self._encoders.values():
             encoder.update_position(self._current_pos, update_occupancy)
-            if self._not_task_1_ct == 1:
+            if self._task_state != 1 and self._save_early:
                 # we also save encoder models at the end of the program,
                 # but we do it here as well just to be safe
                 encoder.save()
+                self._save_early = False
 
         self._pos_counter += 1
         if self._pos_counter % self.p['num_pos_disp'] == 0:

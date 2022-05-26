@@ -216,7 +216,7 @@ def merge_with_temp(config, numprocs):
     # for k, v in remapped_dict.items():
     #     print(f"Key: {k}, value: {v}")
 
-    logging.info("Merging records...")
+    logger.info("Merging records...")
     p.map(merge_pandas, remapped_dict.items())
 
     t1 = time.time()
@@ -229,7 +229,7 @@ def merge_with_temp(config, numprocs):
             except FileNotFoundError:
                 pass
 
-    logger.info("Merging timing info..")
+    logger.info("Merging timing info...")
     merge_timings(config)
 
     logger.info("Copying files to backup location...")
