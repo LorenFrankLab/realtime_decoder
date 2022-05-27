@@ -251,9 +251,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             self._lfp_count += 1
 
         # get envelope
-        filtered_data, env = self._envelope_estimator.add_new_data(
-            msg_data
-        )
+        filtered_data, env = self._envelope_estimator.add_new_data(msg_data)
         cons_env = np.mean(env)
 
         # updates stats
@@ -564,7 +562,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['cond_thresh'] = self._config['ripples']['threshold']['conditioning']
         self.p['content_thresh'] = self._config['ripples']['threshold']['content']
         self.p['end_thresh'] = self._config['ripples']['threshold']['end']
-        self.p['freeze_stats'] = False
+        self.p['freeze_stats'] = self._config['ripples']['freeze_stats']
 
         if (
             self.p['standard_thresh'] >= self.p['cond_thresh'] or
