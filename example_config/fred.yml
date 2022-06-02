@@ -65,6 +65,7 @@ ripples:
   max_ripple_samples: 450
   vel_thresh: 10
   freeze_stats: false
+  timings_bufsize: 1000000
   filter:
     type: 'iir'
     order: 2
@@ -130,6 +131,16 @@ gui:
   trace_length: 2 # seconds
   state_colors: ['#4c72b0','#dd8452', '#55a868']
   num_xticks: 5
+mua:
+  threshold:
+    trigger: 4
+    end: 0
+  freeze_stats: false
+  moving_avg_window: 5
+  # custom_mean:
+  #   1: 700
+  # custom_std:
+  #   1: 300
 stimulation:
   instructive: false
   shortcut_msg_on: true
@@ -152,8 +163,8 @@ stimulation:
     enabled: true
     type: "standard"
     method: "multichannel"
-    event_lockout: 0
-    num_above_thresh: 1
+    event_lockout: 0.2
+    num_above_thresh: 2
   head_direction:
     enabled: true
     rotate_180: true

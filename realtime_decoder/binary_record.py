@@ -33,9 +33,11 @@ class RecordIDs(IntEnum):
     STIM_HEAD_DIRECTION = 13
     STIM_RIPPLE_DETECTED = 14
     STIM_RIPPLE_END = 15
+    STIM_RIPPLE_EVENT = 16
 
-    RIPPLE_DETECTED = 20 
+    RIPPLE_DETECTED = 20
     RIPPLE_END = 21
+    RIPPLE_EVENT = 22
 
     TIMING = 100
 
@@ -293,6 +295,8 @@ class BinaryRecordsFileReader(logging_base.LoggingClass):
         self, save_dir, file_prefix, mpi_rank, num_digits,
         manager_label, file_postfix, *, metadata=False
     ):
+
+        super().__init__()
 
         # self._save_dir = save_dir
         # self._file_prefix = file_prefix
