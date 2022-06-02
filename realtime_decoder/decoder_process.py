@@ -106,9 +106,15 @@ class ClusterlessDecoder(base.Decoder):
         self._position = 0
 
         num_bins = self._config['encoder']['position']['num_bins']
-        self._posterior = utils.normalize_to_probability(np.ones(num_bins))
+        algorithm = self._config['algorithm']
+        num_states = len(self._config[algorithm]['state_labels'])
+        self._posterior = utils.normalize_to_probability(
+            np.ones((num_states, num_bins))
+        )
         self._prev_posterior = self._posterior.copy()
-        self._likelihood = self._posterior.copy()
+        self._likelihood = utils.normalize_to_probability(
+            np.ones(num_bins)
+        )
 
         # be aware that this starts from zero. in order to be correct,
         # we must have self._config['encoder']['position']['lower'] be 0
@@ -160,13 +166,38 @@ class ClusterlessDecoder(base.Decoder):
             self.class_log.info(f"Loaded occupancy from {files[0]}")
 
     def _init_transitions(self):
-        if self._config['algorithm'] == 'clusterless_decoder':
+
+        algorithm = self._config['algorithm']
+        
+        if algorithm == 'clusterless_decoder':
             self._transmat = transitions.sungod_transition_matrix(
                 self._pos_bins, self._arm_coords,
                 self._config['clusterless_decoder']['transmat_bias']
             )
-        elif config['algorithm'] == 'clusterless_classifier':
-            pass
+        elif algorithm == 'clusterless_classifier':
+
+            num_bins = self._config['encoder']['position']['num_bins']
+            num_states = len(self._config[algorithm]['state_labels'])
+
+            dtt = self._config[algorithm]['discrete_transition']['type'][0]
+            diag = self._config[algorithm]['discrete_transition']['diagonal']
+            self._discrete_state_transition = transitions.DISCRETE_TRANSITIONS[dtt](
+                num_states, diag
+            )
+
+            ctt = self._config[algorithm]['continuous_transition']['type']
+            cm_per_bin = self._config[algorithm]['continuous_transition']['cm_per_bin']
+            sigma = self._config[algorithm]['continuous_transition']['gaussian_std']
+
+            self._continuous_state_transition = np.zeros(
+                (num_states, num_states, num_bins, num_bins))
+            for row_ind, row in enumerate(ctt):
+                for col_ind, transition_type in enumerate(row):
+                    self._continuous_state_transition[row_ind, col_ind] = (
+                        transitions.CONTINUOUS_TRANSITIONS[transition_type](
+                            self._arm_coords, cm_per_bin, sigma
+                        )
+                    )
         else:
             raise NotImplementedError(
                 f"Cannot set up model for algorithm {config['algorithm']}"
@@ -219,10 +250,25 @@ class ClusterlessDecoder(base.Decoder):
                 self._likelihood[None, :] *
                 (self._prev_posterior @ self._transmat)
             )
+            self._posterior = utils.normalize_to_probability(
+                self._posterior
+            )
         elif self.p['algorithm'] == 'clusterless_classifier':
-            pass
+            num_states = self._posterior.shape[0]
+            num_bins = self._likelihood.shape[0]
+            prior = np.zeros((num_states, num_bins))
 
-        self._posterior /= self._posterior.sum()
+            for state_k in np.arange(num_states):
+                for state_k_1 in np.arange(num_states):
+                    prior[state_k] += (
+                        self._discrete_state_transition[state_k_1, state_k] *
+                        self._prev_posterior[state_k_1] @
+                        self._continuous_state_transition[state_k_1, state_k]
+                    )
+
+            self._posterior = utils.normalize_to_probability(
+                prior * self._likelihood
+            )
 
         return self._posterior, self._likelihood
 
@@ -269,18 +315,18 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         pos_interface, lfp_interface, pos_mapper
     ):
 
-        if config['algorithm'] == 'clusterless_decoder':
-            state_labels = config['clusterless_decoder']['state_labels']
-        elif config['algorithm'] == 'clusterless_classifier':
-            state_labels = config['clusterless_classifier']['state_labels']
+        algorithm = config['algorithm']
+        if not algorithm in ('clusterless_decoder', 'clusterless_classifier'):
+            raise ValueError(f"Unknown algorithm '{algorithm}'")
+        state_labels = config[algorithm]['state_labels']
 
-        n_bins = config['encoder']['position']['num_bins']
-        dig = len(str(n_bins))
+        num_bins = config['encoder']['position']['num_bins']
+        dig = len(str(num_bins))
         n_arms = len(config['encoder']['position']['arm_coords'])
 
-        pos_labels = [f'x{v:0{dig}d}_{l}' for l in state_labels for v in range(n_bins)]
+        pos_labels = [f'x{v:0{dig}d}_{l}' for l in state_labels for v in range(num_bins)]
         arm_labels = [f'arm{a}' for a in range(n_arms)]
-        likelihood_labels = [f'x{v:0{dig}d}' for v in range(n_bins)]
+        likelihood_labels = [f'x{v:0{dig}d}' for v in range(num_bins)]
         occupancy_labels = likelihood_labels
 
         # note: remove wall time! also changed position of arm labels!
@@ -355,7 +401,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         # timestamp, elec_grp_id, pos, cred_int, used, histogram
         self._spike_buf = np.zeros(
-            (self._config['decoder']['bufsize'], n_bins+5)
+            (self._config['decoder']['bufsize'], num_bins+5)
         )
         self._sb_ind = 0
         self._dropped_spikes = 0
@@ -776,6 +822,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             )
             t1 = time.time_ns()
             self._time_posterior(lb, ub, t0, t1)
+
+        assert posterior.shape[0] == 3
 
         # new method: rather than computing posterior replay target,
         # base, etc. here, have the stimulation decider do this.

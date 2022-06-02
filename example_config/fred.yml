@@ -124,6 +124,19 @@ decoder:
 clusterless_decoder:
   state_labels: ['state']
   transmat_bias: 1
+clusterless_classifier:
+  state_labels: ['stationary', 'continuous', 'fragmented']
+  discrete_transition:
+    type: ["strong_diagonal"]
+    diagonal: 0.98
+  continuous_transition:
+    type: [
+      ["identity", "random_walk", "uniform"],
+      ["identity", "random_walk", "uniform"],
+      ["uniform", "uniform", "uniform"]
+    ]
+    cm_per_bin: 5
+    gaussian_std: 6 # in cm
 gui:
   colormap: 'rocket'
   send_interval: 0 # seconds. Automates parameter sending. Set to <= 0 to disable
@@ -164,7 +177,8 @@ stimulation:
     type: "standard"
     method: "multichannel"
     event_lockout: 0.2
-    num_above_thresh: 2
+    num_above_thresh: 1
+    suprathreshold_period: 0.1
   head_direction:
     enabled: true
     rotate_180: true
