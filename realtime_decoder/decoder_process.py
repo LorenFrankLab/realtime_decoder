@@ -454,6 +454,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         if trode is None:
             dt = np.dtype([
+                ('decoder_rank', '=i4'),
                 ('bin_timestamp_l', '=i8'),
                 ('bin_timestamp_r', '=i8'),
                 ('t_start_post', '=i8'),
@@ -466,6 +467,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._times_ind['posterior'] = 0
         else:
             dt = np.dtype([
+                ('elec_grp_id', '=i4'),
                 ('timestamp', '=i8'),
                 ('t_decoder', '=i8'),
             ])
@@ -639,6 +641,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         # write to timings array
         tarr = self._times[trode]
+        tarr[ind]['elec_grp_id'] = trode
         tarr[ind]['timestamp'] = timestamp
         tarr[ind]['t_decoder'] = t_decoder
         self._times_ind[trode] += 1
@@ -662,6 +665,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         # write to timings array
         tarr = self._times['posterior']
+        tarr[ind]['decoder_rank'] = self.rank
         tarr[ind]['bin_timestamp_l'] = bin_timestamp_l
         tarr[ind]['bin_timestamp_r'] = bin_timestamp_r
         tarr[ind]['t_start_post'] = t_start_post
