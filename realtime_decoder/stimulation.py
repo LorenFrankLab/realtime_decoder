@@ -41,6 +41,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 "This object only handles a two-arm maze"
             )
 
+        burst_labels = [f'burst_{x}' for x in range(num_decoders)]
         spike_count_labels = [f'spike_count_{x}' for x in range(num_decoders)]
         event_spike_count_labels = [f'event_spike_count_{x}' for x in range(num_decoders)]
         avg_spike_rate_labels = [f'avg_spike_rate_{x}' for x in range(num_decoders)]
@@ -55,13 +56,21 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         armls = ['box', 'arm1', 'arm2']
         arm_labels = [f'{arml}_{x}' for x in range(num_decoders) for arml in armls]
 
+        rtrodes = config['trode_selection']['ripples']
+        ripple_ts_labels = [f'ts_{t}_{rtrode}'
+            for rtrode in rtrodes
+                for t in ('start', 'end')
+        ]
+        is_active_labels = [f'is_active_{rtrode}' for rtrode in rtrodes]
+
         super().__init__(
             rank=rank,
             rec_ids=[
                 binary_record.RecordIDs.STIM_MESSAGE,
                 binary_record.RecordIDs.STIM_HEAD_DIRECTION,
                 binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
-                binary_record.RecordIDs.STIM_RIPPLE_END
+                binary_record.RecordIDs.STIM_RIPPLE_END,
+                binary_record.RecordIDs.STIM_RIPPLE_EVENT
             ],
             rec_labels=[
                 ['bin_timestamp_l', 'bin_timestamp_r', 'shortcut_message_sent',
@@ -72,7 +81,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                  'standard_ripple', 'cond_ripple', 'content_ripple',
                  'standard_ripple_consensus', 'cond_ripple_consensus',
                  'content_ripple_consensus'] +
-                 spike_count_labels + event_spike_count_labels +
+                 burst_labels + spike_count_labels + event_spike_count_labels +
                  avg_spike_rate_labels + credible_int_labels + region_labels +
                  base_labels + arm_labels,
                 ['timestamp', 'shortcut_message_sent', 'well', 'raw_x', 'raw_y',
@@ -82,10 +91,15 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 ['timestamp', 'ripple_type', 'is_consensus', 'trigger_trode',
                  'num_above_thresh', 'shortcut_message_sent'],
                 ['timestamp', 'ripple_type', 'is_consensus', 'trigger_trode',
-                 'num_above_thresh']
+                 'num_above_thresh'],
+                ['timestamp_start', 'timestamp_end', 'trigger_trode_start',
+                 'trigger_trode_end', 'ripple_type', 'is_consensus',
+                 'num_above_thresh', 'shortcut_message_sent'] +
+                 ripple_ts_labels + is_active_labels
             ],
             rec_formats=[
                 'qq?dddiiidid?qdd??????' +
+                '?'*len(burst_labels) +
                 'q'*len(spike_count_labels) +
                 'q'*len(event_spike_count_labels) +
                 'd'*len(avg_spike_rate_labels) +
@@ -95,7 +109,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 'd'*len(arm_labels),
                 'q?idddddddddddd?',
                 'q10s?ii?',
-                'q10s?ii'
+                'q10s?ii',
+                'qqii10s?i?' + 'q'*len(ripple_ts_labels) + '?'*len(is_active_labels)
             ],
             send_interface=StimDeciderSendInterface(comm, rank, config),
             manager_label='state'
@@ -120,23 +135,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._current_pos = 0
         self._current_vel = 0
 
-        ripple_types = ('standard', 'cond', 'content')
-        self._ripple_trodes = {
-            rtype: [] for rtype in ripple_types
-        }
-        self._ripple_timestamps = deepcopy(self._ripple_trodes)
-        self._is_in_multichannel_ripple = {
-            rtype: False for rtype in ripple_types
-        }
-        self._is_in_consensus_ripple = deepcopy(self._is_in_multichannel_ripple)
-
-        self._center_well_loc = self._config['stimulation']['center_well_loc']
-        well_loc = self._config['stimulation']['head_direction']['well_loc']
-        self._well_1_x = well_loc[0][0]
-        self._well_1_y = well_loc[0][1]
-        self._well_2_x = well_loc[1][0]
-        self._well_2_y = well_loc[1][1]
-        self._head_angle = 0
         self._center_well_dist = 0
         self._is_center_well_proximate = False
 
@@ -155,8 +153,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         else:
             self._max_repeats = -1 # currently no restriction
 
-        self._init_stim_params()
+        ripple_types = ('standard', 'cond', 'content')
+        self._init_ripple_misc(rtrodes, ripple_types)
+        self._init_head_dir()
         self._init_data_buffers()
+        self._seed_mua_stats()
+        self._init_stim_params()
         self._init_params()
 
     def handle_message(self, msg, mpi_status):
@@ -220,60 +222,93 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             # check all keys in the dictionary
             for rt in self._is_in_multichannel_ripple:
 
+                # track end ripple of every trode, regardless of whether
+                # this particular timestamp marks the end of a multichannel
+                # ripple
+
+                rtrode_ind = self._rtrode_ind_map[trode]
+                self._ripple_ts[rt][rtrode_ind, 1] = ts
+
                 if (
-                    self._is_in_multichannel_ripple[rt] and
-                    trode in self._ripple_trodes[rt]
+                    self._active_trodes[rt] is not None and
+                    trode in self._active_trodes[rt]
                 ):
 
-                    self._ripple_trodes[rt].remove(trode)
+                    self._active_trodes[rt].remove(trode)
 
-                    # all ripple trodes that triggered ripple start have
-                    # finished their ripples
-                    if self._ripple_trodes[rt] == []:
+                # all trodes that had triggered ripple have completed
+                if self._active_trodes[rt] == [] and self._is_in_multichannel_ripple[rt]:
 
-                        self._ripple_timestamps[rt] = [] # reset vector of timestamps
-                        self._is_in_multichannel_ripple[rt] = False
+                    self.write_record(
+                        binary_record.RecordIDs.STIM_RIPPLE_EVENT,
+                        self._ripple_event_ts[rt], ts,
+                        self._ripple_trigger_trode[rt], trode,
+                        bytes(rt, 'utf-8'), False,
+                        self.p_ripples['num_above_thresh'],
+                        self._ripple_sms[rt],
+                        *self._ripple_ts[rt].flatten(),
+                        *self._is_rtrode_active[rt]
+                    )
 
-                        self.write_record(
-                            binary_record.RecordIDs.STIM_RIPPLE_END,
-                            ts, bytes(rt, 'utf-8'), False, trode,
-                            self.p_ripples['num_above_thresh']
-                        )
+                    self._ripple_ts[rt][:] = -1
+                    self._is_rtrode_active[rt][:] = False
+                    self._is_in_multichannel_ripple[rt] = False
 
         else: # must be a ripple onset message
 
-            # ok to add ripple trodes
+            # keeping track of every timestamp. not subject to event lockout
+            # constraint
+            rtrode_ind = self._rtrode_ind_map[trode]
+            self._ripple_ts[rtype][rtrode_ind, 0] = ts
+
             if (
                 not self._is_in_multichannel_ripple[rtype] and
                 ts > self._ripple_event_ts[rtype] + self._ripple_event_ls
             ):
 
-                self._ripple_trodes[rtype].append(trode)
-                self._ripple_timestamps[rtype].append(ts)
+                num_above = self.p_ripples['num_above_thresh']
+                S = self._stwin_samples
 
-                # now check if number of ripple trodes exceeds minimum
-                if len(self._ripple_trodes[rtype]) >= self.p_ripples['num_above_thresh']:
+                cand_trodes = self._rtrodes
+                cand_timestamps = self._ripple_ts[rtype][:, 0]
 
-                    assert len(self._ripple_trodes[rtype]) == self.p_ripples['num_above_thresh']
+                # rearrange trodes according to detection times
+                sort_inds = np.argsort(cand_timestamps)
+                cand_trodes = cand_trodes[sort_inds]
+                cand_timestamps = cand_timestamps[sort_inds]
 
-                    self._is_in_multichannel_ripple[rtype] = True
-                    self._ripple_event_ts[rtype] = ts
+                # minimum number of trodes are above threshold
+                # now determine if they satisfy the criteria
+                # that their ripple times fell within a
+                # user-specified time window
+                if np.sum(cand_timestamps > -1) >= num_above:
 
-                    send_shortcut_message = self._check_send_shortcut(
-                        (
-                            self.p_ripples['enabled'] and
-                            self.p_ripples['type'] == rtype and
-                            self.p_ripples['method'] == 'multichannel'
+                    most_recent_ts = cand_timestamps[-1]
+
+                    if most_recent_ts - cand_timestamps[-num_above] <= S:
+
+                        active_trodes = cand_trodes[-num_above:]
+                        for active_trode in active_trodes:
+                            active_trode_ind = self._rtrode_ind_map[active_trode]
+                            self._is_rtrode_active[rtype][active_trode_ind] = True
+
+                        self._ripple_trigger_trode[rtype] = trode
+                        self._active_trodes[rtype] = list(active_trodes) # forces copy
+                        self._ripple_event_ts[rtype] = ts
+                        self._is_in_multichannel_ripple[rtype] = True
+
+                        send_shortcut_message = self._check_send_shortcut(
+                            (
+                                self.p_ripples['enabled'] and
+                                self.p_ripples['type'] == rtype and
+                                self.p_ripples['method'] == 'multichannel'
+                            )
                         )
-                    )
-                    if send_shortcut_message:
-                        self._trodes_client.send_statescript_shortcut_message(14)
+                        if send_shortcut_message:
+                            self._trodes_client.send_statescript_shortcut_message(14)
 
-                    self.write_record(
-                        binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
-                        ts, bytes(rtype, 'utf-8'), False, trode,
-                        self.p_ripples['num_above_thresh'], send_shortcut_message
-                    )
+                        self._ripple_sms[rtype] = send_shortcut_message
+
 
     def _update_cons_ripple_status(self, msg):
 
@@ -285,13 +320,26 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
             for rt in self._is_in_consensus_ripple:
 
-                if self._is_in_consensus_ripple[rt]:
+                if (
+                    self._is_in_consensus_ripple[rt] and
+                    ts > self._cons_ripple_event_ts[rt]
+                ):
 
                     self.write_record(
-                        binary_record.RecordIDs.STIM_RIPPLE_END,
-                        ts, bytes(rt, 'utf-8'), True,
-                        -1, -1
+                        binary_record.RecordIDs.STIM_RIPPLE_EVENT,
+                        self._cons_ripple_event_ts[rt], ts,
+                        -1, -1,
+                        bytes(rt, 'utf-8'), True,
+                        -1, self._cons_ripple_sms[rt],
+                        *np.full(len(self._rtrodes)*2, -1, dtype=int),
+                        *np.zeros(len(self._rtrodes), dtype=bool)
                     )
+
+                    # self.write_record(
+                    #     binary_record.RecordIDs.STIM_RIPPLE_END,
+                    #     ts, bytes(rt, 'utf-8'), True,
+                    #     -1, -1
+                    # )
                     self._is_in_consensus_ripple[rt] = False
 
         else: # must be start
@@ -315,11 +363,13 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 if send_shortcut_message:
                     self._trodes_client.send_statescript_shortcut_message(14)
 
-                self.write_record(
-                    binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
-                    ts, bytes(rtype, 'utf-8'), True,
-                    -1, -1, send_shortcut_message
-                )
+                self._cons_ripple_sms[rtype] = send_shortcut_message
+
+                # self.write_record(
+                #     binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
+                #     ts, bytes(rtype, 'utf-8'), True,
+                #     -1, -1, send_shortcut_message
+                # )
 
     def _update_velocity_position(self, msg):
 
@@ -495,7 +545,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         # set various indices and counts
         self._dec_ind = self._decoder_rank_ind_map[msg[0]['rank']]
         self._dd_ind = self._dd_inds[self._dec_ind]
-        self._decoder_count[self._dec_ind] += 1
 
         # run data processing methods
         self._update_spike_stats(msg)
@@ -506,11 +555,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         else:
             self._find_replay(msg)
 
-        # advance the relevant decoder data index
+        # advance the relevant decoder data index and counters
         self._dd_inds[self._dec_ind] = (
             (self._dd_inds[self._dec_ind] + 1) %
             self.p_replay['sliding_window']
         )
+        self._decoder_count[self._dec_ind] += 1
 
     def _update_spike_stats(self, msg):
 
@@ -520,7 +570,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._spike_count[ind] = msg[0]['spike_count']
         self._event_spike_count[ind, self._dd_ind] = msg[0]['spike_count']
 
-        self._update_bin_firing_rate(ind, msg)
+        self._update_mua_stats(ind, msg)
 
         if self._decoder_count[ind] % self.p['num_dec_disp'] == 0:
             print(
@@ -529,12 +579,17 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 'std:', np.around(self._bin_fr_std[ind], decimals=3), ')',
             )
 
-    def _update_bin_firing_rate(self, ind, msg):
+    def _update_mua_stats(self, ind, msg):
 
         spike_rate = msg[0]['spike_count'] / self._dt
+
+        # unlike the MUA, the binned spike firing rate stats
+        # cannot be frozen or seeded with initial values, as
+        # they are meant to be purely informative (no further
+        # computation is done with them)
         (self._bin_fr_means[ind],
-         self._bin_fr_M2[ind],
-         self._bin_fr_N[ind]
+        self._bin_fr_M2[ind],
+        self._bin_fr_N[ind]
         ) = utils.estimate_new_stats(
             spike_rate,
             self._bin_fr_means[ind],
@@ -544,6 +599,42 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._bin_fr_std[ind] = np.sqrt(
             self._bin_fr_M2[ind] / self._bin_fr_N[ind]
         )
+
+        self._detect_mua_events(ind, spike_rate)
+
+    def _detect_mua_events(self, ind, spike_rate):
+
+        N = self.p['mua_window']
+        self._mua_buf[ind, self._decoder_count[ind] % N] = spike_rate
+        mua_datapoint = np.mean(self._mua_buf[ind])
+
+        if not self.p['mua_freeze_stats']:
+            (self._mua_means[ind],
+            self._mua_M2[ind],
+            self._mua_N[ind]
+            ) = utils.estimate_new_stats(
+            mua_datapoint,
+            self._mua_means[ind],
+            self._mua_M2[ind],
+            self._mua_N[ind]
+            )
+            self._mua_std[ind] = np.sqrt(
+                self._mua_M2[ind] / self._mua_N[ind]
+            )
+
+        sigma1 = self.p['mua_trigger_thresh']
+        sigma2 = self.p['mua_end_thresh']
+        if (
+            not self._in_burst[ind] and
+            mua_datapoint > self._mua_means[ind] + sigma1 * self._mua_std[ind]
+        ):
+            self._in_burst[ind] = True
+
+        elif (
+            self._in_burst[ind] and
+            mua_datapoint <= self._mua_means[ind] + sigma2 * self._mua_std[ind]
+        ):
+            self._in_burst[ind] = False
 
     def _update_decode_stats(self, msg):
 
@@ -743,7 +834,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self._is_in_multichannel_ripple['content'],
             self._is_in_consensus_ripple['standard'],
             self._is_in_consensus_ripple['cond'],
-            self._is_in_consensus_ripple['content'], *self._spike_count,
+            self._is_in_consensus_ripple['content'],
+            *self._in_burst, *self._spike_count,
             *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
             *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
             *self._region_ps_buff.mean(axis=1).flatten(),
@@ -865,39 +957,65 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         return self._task_state == 2 and other_condition
 
-    def _init_stim_params(self):
+    def _init_ripple_misc(self, rtrodes, ripple_types):
 
-        # Convention
-        # ts - timestamp
-        # ls - lockout samples
-
-        self._replay_event_ts = 0
-        self._replay_event_ls = int(
-            self._config['sampling_rate']['spikes'] *
-            self._config['stimulation']['replay']['event_lockout']
-        )
-
-        ripple_types = ('standard', 'cond', 'content')
-        self._ripple_event_ts = {
-            rtype: 0 for rtype in ripple_types
+        self._is_in_multichannel_ripple = {
+            rtype: False for rtype in ripple_types
         }
-        self._ripple_event_ls = int(
-            self._config['sampling_rate']['spikes'] *
-            self._config['stimulation']['ripples']['event_lockout']
+        self._is_in_consensus_ripple = deepcopy(
+            self._is_in_multichannel_ripple
         )
 
-        # Initial consensus ripple variables same as for multichannel
-        # ripple variables
-        self._cons_ripple_event_ts = {
-            rtype: 0 for rtype in ripple_types
+        self._rtrodes = np.array(rtrodes, dtype=int)
+
+        # not recorded, but used for ripple detection book-keeping
+        self._rtrode_ind_map = {}
+        for ii, trode in enumerate(rtrodes):
+            self._rtrode_ind_map[trode] = ii
+
+        # will be set to variable-length list as needed, see
+        # _update_ripple_status()
+        self._active_trodes = {
+            rtype: None for rtype in ripple_types
         }
-        self._cons_ripple_event_ls = self._ripple_event_ls
 
-        self._head_event_ts = 0
-        self._head_event_ls = int(
-            self._config['sampling_rate']['spikes'] *
-            self._config['stimulation']['head_direction']['event_lockout']
+        # ripple detection data recorded to disk
+        # starts and ends of ripples
+        self._ripple_ts = {
+            rtype: np.full((len(rtrodes), 2), -1, dtype=int)
+            for rtype in ripple_types
+        }
+        self._is_rtrode_active = {
+            rtype: np.zeros(len(rtrodes), dtype=bool)
+            for rtype in ripple_types
+        }
+        self._ripple_trigger_trode = {
+            rtype: -1 for rtype in ripple_types
+        }
+        self._ripple_sms = { # shorthand for "shortcut message sent"
+            rtype: False for rtype in ripple_types
+        }
+        self._cons_ripple_sms = deepcopy(self._ripple_sms)
+
+        # suprathreshold window samples
+        self._stwin_samples = int(
+            np.around(
+                self._config['stimulation']['ripples']['suprathreshold_period'] *
+                self._config['sampling_rate']['spikes'],
+                decimals=0
+            )
         )
+
+    def _init_head_dir(self):
+
+        self._head_angle = 0
+        self._center_well_loc = self._config['stimulation']['center_well_loc']
+
+        well_loc = self._config['stimulation']['head_direction']['well_loc']
+        self._well_1_x = well_loc[0][0]
+        self._well_1_y = well_loc[0][1]
+        self._well_2_x = well_loc[1][0]
+        self._well_2_y = well_loc[1][1]
 
     def _init_data_buffers(self):
 
@@ -954,6 +1072,70 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._spike_count = np.zeros(num_decoders, dtype=int)
         self._event_spike_count = np.zeros((num_decoders, N), dtype=int)
 
+        # stats of mua
+        self._mua_means = np.zeros(num_decoders)
+        self._mua_M2 = np.zeros(num_decoders)
+        self._mua_N = np.zeros(num_decoders)
+        self._mua_std = np.zeros(num_decoders)
+        self._mua_buf = np.zeros((
+            num_decoders, self._config['mua']['moving_avg_window']
+        ))
+
+        # whether mua threshold crossed
+        self._in_burst = np.full(num_decoders, False, dtype=bool)
+
+    def _seed_mua_stats(self):
+
+        try:
+            for rank, ind in self._decoder_rank_ind_map.items():
+                self.class_log.debug(f"Seeded MUA stats for decoder rank {rank}")
+                self._mua_means[ind] = self._config['mua']['custom_mean'][rank]
+                self._mua_N[ind] = 1
+                self._mua_std[ind] = self._config['mua']['custom_std'][rank]
+                self._mua_M2[ind] = self._mua_std[ind]**2 * self._mua_N[ind]
+        except:
+            pass
+
+    def _init_stim_params(self):
+
+        # Convention
+        # ts - timestamp
+        # ls - lockout samples
+
+        ##################################################################
+        # Replay
+        self._replay_event_ts = 0
+        self._replay_event_ls = int(
+            self._config['sampling_rate']['spikes'] *
+            self._config['stimulation']['replay']['event_lockout']
+        )
+
+        ##################################################################
+        # Ripples
+        ripple_types = ('standard', 'cond', 'content')
+        self._ripple_event_ts = {
+            rtype: 0 for rtype in ripple_types
+        }
+        self._ripple_event_ls = int(
+            self._config['sampling_rate']['spikes'] *
+            self._config['stimulation']['ripples']['event_lockout']
+        )
+
+        # Initial consensus ripple variables same as for multichannel
+        # ripple variables
+        self._cons_ripple_event_ts = {
+            rtype: 0 for rtype in ripple_types
+        }
+        self._cons_ripple_event_ls = self._ripple_event_ls
+
+        ##################################################################
+        # Head direction
+        self._head_event_ts = 0
+        self._head_event_ls = int(
+            self._config['sampling_rate']['spikes'] *
+            self._config['stimulation']['head_direction']['event_lockout']
+        )
+
     def _init_params(self):
 
         self.p = {}
@@ -968,6 +1150,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p['num_dec_disp'] = self._config['display']['stim_decider']['decoding_bins']
         self.p['max_center_well_dist'] = self._config['stimulation']['max_center_well_dist']
         self.p['arm_coords'] = self._config['encoder']['position']['arm_coords']
+        self.p['mua_trigger_thresh'] = self._config['mua']['threshold']['trigger']
+        self.p['mua_end_thresh'] = self._config['mua']['threshold']['end']
+        self.p['mua_window'] = self._config['mua']['moving_avg_window']
+        self.p['mua_freeze_stats'] = self._config['mua']['freeze_stats']
 
         # verify some inputs
         replay_method = self._config['stimulation']['replay']['method']
@@ -982,6 +1168,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 f"Invalid method {ripple_method} for ripples"
             )
 
+        # copy replay, ripples, and head direction config information
+        # into separate dictionaries
         self.p_replay = {}
         for k, v in self._config['stimulation']['replay'].items():
             self.p_replay[k] = v
