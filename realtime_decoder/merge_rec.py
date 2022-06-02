@@ -90,6 +90,7 @@ def merge_timings(config):
         )
     )
 
+    spikes_dfs = []
     for file in filelist:
         trode = file.rstrip(f'.{postfix}.npz').split('_')[-1]
         dec_file = glob.glob(
@@ -106,10 +107,13 @@ def merge_timings(config):
             df2 = pd.DataFrame(f['timings'])
 
         df = df1.merge(df2)
-        with pd.HDFStore(outfile, 'a') as hdf_store:
-            hdf_store[f'trode_{trode}'] = df
 
-    # now do the standalone decoder files
+        spikes_dfs.append(df)
+
+    with pd.HDFStore(outfile, 'a') as hdf_store:
+        hdf_store['spikes'] = pd.concat(spikes_dfs)
+
+    # do the standalone decoder files
     filelist = glob.glob(
         os.path.join(
             config['files']['output_dir'],
@@ -117,13 +121,30 @@ def merge_timings(config):
         )
     )
 
+    decoder_dfs = []
     for file in filelist:
         rank = file.rstrip(f'.{postfix}.npz').split('_')[-1]
         with np.load(file) as f:
-            df = pd.DataFrame(f['timings'])
+            decoder_dfs.append(pd.DataFrame(f['timings']))
 
-        with pd.HDFStore(outfile, 'a') as hdf_store:
-            hdf_store[f'dec_rank_{rank}'] = df
+    with pd.HDFStore(outfile, 'a') as hdf_store:
+        hdf_store['posterior'] = pd.concat(decoder_dfs)
+
+    # finally do the standalone ripple files
+    filelist = glob.glob(
+        os.path.join(
+            config['files']['output_dir'],
+            f'{prefix}*ripples_rank_*{postfix}.npz'
+        )
+    )
+
+    ripple_dfs = []
+    for file in filelist:
+        with np.load(file) as f:
+            ripple_dfs.append(pd.DataFrame(f['timings']))
+
+    with pd.HDFStore(outfile, 'a') as hdf_store:
+        hdf_store['ripples'] = pd.concat(ripple_dfs)
 
 def copy_to_backup(config):
 
@@ -164,15 +185,16 @@ def merge_with_temp(config, numprocs):
             f"Got {numprocs}"
         )
 
+    prefix = config['files']['prefix']
     postfix = config['files']['rec_postfix']
     save_dir = config['files']['output_dir']
 
     testfile = glob.glob(
-        os.path.join(save_dir, f'*.{postfix}')
+        os.path.join(save_dir, f'{prefix}*.{postfix}')
     )[0]
-    
+
     fname = os.path.basename(testfile)
-    prefix, rank, manager_label, _ = tuple(fname.split('.'))
+    _, rank, manager_label, _ = tuple(fname.split('.'))
     num_digits = len(rank)
 
     reader_list = []
@@ -252,7 +274,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help="Path to config file")
     parser.add_argument(
-        '--numprocs', '-n', type=int, default=20,
+        '--numprocs', '-n', type=int, default=mp.cpu_count()-1,
         help="Max number of processes to spawn"
     )
 
