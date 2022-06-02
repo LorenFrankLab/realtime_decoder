@@ -113,8 +113,8 @@ class TerminateSignal(PrintableClass):
     """Communicates that a process should be terminated
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, *, exit_code=0):
+        self.exit_code = 0
 
 class SetupComplete(PrintableClass):
     """Communicates that setup is complete for all processes

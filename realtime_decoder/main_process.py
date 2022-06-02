@@ -77,10 +77,11 @@ class MainMPISendInterface(base.MPISendInterface):
                 tag=messages.MPIMessageTag.COMMAND_MESSAGE
             )
 
-    def send_termination_signal(self, ranks:Sequence[int]) -> None:
+    def send_termination_signal(self, ranks:Sequence[int], *, exit_code=0) -> None:
+        obj = messages.TerminateSignal(exit_code=exit_code)
         for rank in ranks:
             self.comm.send(
-                obj=messages.TerminateSignal(), dest=rank,
+                obj=obj, dest=rank,
                 tag=messages.MPIMessageTag.COMMAND_MESSAGE
             )
 
@@ -216,13 +217,15 @@ class MainManager(base.MessageHandler):
 
     def trigger_termination(self, *, raise_stop_iteration=True):
         self._send_interface.send_termination_signal(self._ranks_to_monitor)
-        
+
         if raise_stop_iteration:
             raise StopIteration()
 
     def terminate_remaining_processes(self, ranks):
 
-        self._send_interface.send_termination_signal(sorted(ranks))
+        self._send_interface.send_termination_signal(
+            sorted(ranks), exit_code=1
+        )
         raise StopIteration()
 
     def _startup_ripples(self):
