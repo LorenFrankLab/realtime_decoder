@@ -251,8 +251,6 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             t0 = time.time_ns()
             self._process_lfp(lfp_msg)
             t1 = time.time_ns()
-            if (t1 - t0)/1e6 > 50:
-                self.class_log.warning("Timestamp {lfp_msg.timestamp}, high latency {lat_ms}")
             self._record_timings(
                 lfp_msg.timestamp,
                 lfp_msg.t_send_data, lfp_msg.t_recv_data,
