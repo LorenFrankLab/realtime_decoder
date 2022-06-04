@@ -194,9 +194,10 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self._in_ripple = {}
 
         self._lfp_count = 0
-        self._curr_timestamp = -1
+        self._lfp_timestamp = -1
 
         self._current_vel = 0
+        self._pos_timestamp = -1
 
         self._init_params()
         self._init_timings()
@@ -268,8 +269,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         t_send_data = msg.t_send_data
         t_recv_data = msg.t_recv_data
 
-        if msg_timestamp != self._curr_timestamp:
-            self._curr_timestamp = msg_timestamp
+        if msg_timestamp != self._lfp_timestamp:
+            self._lfp_timestamp = msg_timestamp
             self._lfp_count += 1
 
         # get envelope
@@ -318,13 +319,21 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             self.p['send_lfp_timestamp'] and
             self._lfp_count % self.p['lfp_samples_per_time_bin'] == 0
         ):
-            # self.class_log.info(f"Sending timestamp {self._curr_timestamp}")
-            self.send_interface.send_lfp_timestamp(self._curr_timestamp)
+            self._update_decoder()
 
         if self._lfp_count % self.p['num_lfp_disp'] == 0:
             self.class_log.debug(f"Received {self._lfp_count} lfp points")
 
     def _process_pos(self, pos_msg):
+
+        if pos_msg.timestamp <= self._pos_timestamp:
+            self.class_log.warning(
+                f"Duplicate or backwards timestamp. New timestamp: {pos_msg.timestamp}, "
+                f"Most recent timestamp: {self._pos_timestamp}"
+            )
+            return
+
+        self._pos_timestamp = pos_msg.timestamp
 
         # calculate velocity using the midpoints
         xmid = (pos_msg.x + pos_msg.x2)/2
@@ -496,12 +505,9 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
         return 0, False, False, False
 
-    def freeze_stats(self):
-        self.class_log.info("Updating stats disabled")
-        self.p['freeze_stats'] = True
-
-    def unfreeze_stats(self):
-        self.p['freeze_stats'] = False
+    def _update_decoder(self):
+        # self.class_log.info(f"Sending timestamp {self._lfp_timestamp}")
+        self.send_interface.send_lfp_timestamp(self._lfp_timestamp)
 
     def _reset_data(self, trodes:List):
 
@@ -712,10 +718,6 @@ class RippleProcess(base.RealtimeProcess):
                 self._mpi_recv.receive()
                 self._gui_recv.receive()
                 self._ripple_manager.next_iter()
-                # if time.time() - t0 > (5.5*60):
-                #     if freeze:
-                #         self._ripple_manager.freeze_stats()
-                #         freeze = False
 
         except StopIteration as ex:
             self.class_log.info("Exiting normally")
