@@ -306,7 +306,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._pos_counter = 0
         self._current_pos = 0
         self._current_vel = 0
-        self._pos_timestamp = 0
+        self._pos_timestamp = -1
 
         self._init_params()
 

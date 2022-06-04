@@ -413,7 +413,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._spike_msg_ct = 0
 
         self._pos_ct = 0
-        self._pos_timestamp = 0
+        self._pos_timestamp = -1
         self._current_pos = 0 # mapped position
         self._current_vel = 0
         self._raw_x = 0
