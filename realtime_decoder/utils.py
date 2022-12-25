@@ -2,8 +2,36 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import os
 import fcntl
+import pathlib
 
 from typing import List
+
+def _extract_configuration(recfile):
+    lines = []
+    with open(recfile, 'rb') as f:
+        fileline = ''
+        while True:
+            fileline = f.readline()
+            lines.append(fileline)
+            if b'</Configuration>' in fileline:
+                break
+
+    root = ET.fromstringlist(lines)
+    return root
+
+def _get_xml_root(file):
+    p = pathlib.Path(file)
+    suffix = p.suffix
+
+    if suffix == '.trodesconf':
+        xmltree = ET.parse(file)
+        root = xmltree.getroot()
+    elif suffix == '.rec':
+        root = _extract_configuration(file)
+    else:
+        raise ValueError(f"Could not get xml tree from file {file}")
+
+    return root
 
 def nop():
     pass
@@ -11,8 +39,8 @@ def nop():
 def get_ntrode_inds(config, ntrode_ids):
     # ntrode_ids should be a list of integers
     inds_to_extract = []
-    xmltree = ET.parse(config["trodes"]["config_file"])
-    root = xmltree.getroot()
+
+    root = _get_xml_root(config["trodes"]["config_file"])
     for ii, ntrode in enumerate(root.iter("SpikeNTrode")):
         ntid = int(ntrode.get("id"))
         if ntid in ntrode_ids:
@@ -21,8 +49,7 @@ def get_ntrode_inds(config, ntrode_ids):
     return inds_to_extract
 
 def get_network_address(config):
-    xmltree = ET.parse(config["trodes"]["config_file"])
-    root = xmltree.getroot()
+    root = _get_xml_root(config["trodes"]["config_file"])
     network_config = root.find("NetworkConfiguration")
 
     if network_config is None:
