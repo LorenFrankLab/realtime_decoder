@@ -475,7 +475,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 print(
                     "Head direction event arm 2", np.around(angle, decimals=2),
                     "at time", np.around(ts/30000, decimals=2),
-                    "angle to target", np.around(angle, deicmals=2)
+                    "angle to target", np.around(angle, decimals=2)
                 )
                 well = 2
                 record = True
