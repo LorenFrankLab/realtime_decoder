@@ -823,8 +823,6 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             t1 = time.time_ns()
             self._time_posterior(lb, ub, t0, t1)
 
-        assert posterior.shape[0] == 3
-
         # new method: rather than computing posterior replay target,
         # base, etc. here, have the stimulation decider do this.
         # that is where most of the customized stuff should go
