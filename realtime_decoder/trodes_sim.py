@@ -192,7 +192,7 @@ class TrodesSimServer(logging_base.LoggingClass):
         self._spike_sock = self._ctx.socket(zmq.PUB)
         self._spike_sock.bind(f"{host}:{port}")
         self.class_log.debug(
-            f"Spikes socket connected to "
+            f"Spikes socket publishing at "
             f"{self._spike_sock.get_string(zmq.LAST_ENDPOINT)}"
         )
 
@@ -200,7 +200,7 @@ class TrodesSimServer(logging_base.LoggingClass):
         self._lfp_sock = self._ctx.socket(zmq.PUB)
         self._lfp_sock.bind(f"{host}:{port}")
         self.class_log.debug(
-            f"LFP socket connected to "
+            f"LFP socket publishing at "
             f"{self._lfp_sock.get_string(zmq.LAST_ENDPOINT)}"
         )
         
@@ -208,7 +208,7 @@ class TrodesSimServer(logging_base.LoggingClass):
         self._pos_sock = self._ctx.socket(zmq.PUB)
         self._pos_sock.bind(f"{host}:{port}")
         self.class_log.debug(
-            f"Pos socket connected to "
+            f"Pos socket publishing at "
             f"{self._pos_sock.get_string(zmq.LAST_ENDPOINT)}"
         )
 
@@ -220,7 +220,7 @@ class TrodesSimServer(logging_base.LoggingClass):
         self._spike_data['nTrodeId'] = int(spike_obj.elec_grp_id)
         self._spike_data['samples'] = spike_obj.data.tolist()
 
-        print(f"Sending spike ntrode {int(spike_obj.elec_grp_id)}, timestamp {int(spike_obj.timestamp)}")
+        # print(f"Sending spike ntrode {int(spike_obj.elec_grp_id)}, timestamp {int(spike_obj.timestamp)}")
 
         self._spike_sock.send(msgpack.packb(self._spike_data))
 
@@ -273,7 +273,7 @@ class TrodesPosReader(TrodesFileReader):
 
     def _load_pos(self):
 
-        self.class_log.info("Loading position data")
+        self.class_log.info("Loading position data...")
 
         pos_file = utils.find_unique_file(
             os.path.join(
@@ -364,10 +364,7 @@ class TrodesSpikesReader(TrodesFileReader):
 
     def _load_spikes(self):
 
-        self.class_log.info(
-            "Loading spikes from ntrodes "
-            f"{self.config['trode_selection']['decoding']}..."
-        )
+        self.class_log.info("Loading spike data...")
 
         # the reason we store spikes as a list of objects is because
         # we don't know the dimensionality of each tetrode
@@ -444,6 +441,11 @@ class TrodesSpikesReader(TrodesFileReader):
 
         try:
             if self._spike_datas[self._curr_ind].timestamp == ts:
+                # print(
+                #     f"Timestamp {ts}, "
+                #     f"current timestamp {self._spike_datas[self._curr_ind].timestamp}, "
+                #     f"next timesttamp {self._spike_datas[self._curr_ind+1].timestamp}"
+                # )
                 self._spike_obj = self._spike_datas[self._curr_ind]
                 self._curr_ind += 1
                 return self._spike_obj
@@ -474,6 +476,8 @@ class TrodesLFPReader(TrodesFileReader):
         return data['time']
 
     def _load_lfp(self, timestamps):
+
+        self.class_log.info("Loading LFP data...")
 
         recfile = utils.find_unique_file(
             os.path.join(
