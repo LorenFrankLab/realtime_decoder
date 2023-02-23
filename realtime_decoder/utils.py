@@ -3,6 +3,7 @@ import numpy as np
 import os
 import fcntl
 import pathlib
+import glob
 
 from typing import List
 
@@ -19,7 +20,7 @@ def _extract_configuration(recfile):
     root = ET.fromstringlist(lines)
     return root
 
-def _get_xml_root(file):
+def get_xml_root(file):
     p = pathlib.Path(file)
     suffix = p.suffix
 
@@ -36,11 +37,11 @@ def _get_xml_root(file):
 def nop():
     pass
 
-def get_ntrode_inds(config, ntrode_ids):
+def get_ntrode_inds(file, ntrode_ids):
     # ntrode_ids should be a list of integers
     inds_to_extract = []
 
-    root = _get_xml_root(config["trodes"]["config_file"])
+    root = get_xml_root(file)
     for ii, ntrode in enumerate(root.iter("SpikeNTrode")):
         ntid = int(ntrode.get("id"))
         if ntid in ntrode_ids:
@@ -48,8 +49,8 @@ def get_ntrode_inds(config, ntrode_ids):
 
     return inds_to_extract
 
-def get_network_address(config):
-    root = _get_xml_root(config["trodes"]["config_file"])
+def get_network_address(file):
+    root = get_xml_root(file)
     network_config = root.find("NetworkConfiguration")
 
     if network_config is None:
@@ -126,3 +127,32 @@ def write_text_file(textfile, val):
     with open(textfile, 'a') as f:
 
         f.write(str(val) + '\n')
+
+def get_switch_time(taskfile):
+
+    with open(taskfile, 'r') as f:
+        lines = f.readlines()
+
+    t = []
+    for line in lines:
+        # not interested in comment lines
+        if 'DECODER_TASK2' in line and line[0] != '#':
+            t.append(int(line.split(' ')[0]))
+
+    if len(t) != 1:
+        raise ValueError(
+            f"Switch times are {t}, expected exactly only one switch time"
+        )
+
+    # the return value is in milliseconds NOT sample number
+    return t[0]
+
+def find_unique_file(pattern, desc):
+
+    files = glob.glob(pattern)
+
+    if len(files) != 1:
+        raise ValueError(f"Expected exactly one {desc} but got ")
+
+    return files[0]
+

@@ -93,6 +93,13 @@ class DialogSendInterface(base.StandardMPISendInterface):
             tag=messages.MPIMessageTag.COMMAND_MESSAGE
         )
 
+        if self.config['datasource'] == 'trodes_simulator':
+            self.comm.send(
+                obj=messages.StartupSignal(),
+                dest=self.config['rank']['simulator'][0],
+                tag=messages.MPIMessageTag.COMMAND_MESSAGE
+            )
+
     def send_shutdown(self):
         self.comm.send(
             obj=messages.TerminateSignal(),
