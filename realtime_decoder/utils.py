@@ -152,7 +152,9 @@ def find_unique_file(pattern, desc):
     files = glob.glob(pattern)
 
     if len(files) != 1:
-        raise ValueError(f"Expected exactly one {desc} but got ")
+        raise ValueError(
+            f"Expected exactly one {desc} file but got {files}"
+        )
 
     return files[0]
 

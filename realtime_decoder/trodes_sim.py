@@ -7,6 +7,7 @@ import zmq
 import msgpack
 import numpy as np
 
+from typing import List
 from operator import attrgetter
 from abc import ABCMeta
 from zmq import ZMQError
@@ -16,12 +17,37 @@ from realtime_decoder.datatypes import (
     Datatypes, LFPPoint, SpikePoint, CameraModulePoint
 )
 
+####################################################################################
+# Data classes
+####################################################################################
+
 class TrodesSpikeSample(messages.PrintableClass):
 
     def __init__(self, elec_grp_id, timestamp, data):
         self.elec_grp_id = elec_grp_id
         self.timestamp = timestamp
         self.data = data
+
+####################################################################################
+# Interfaces
+####################################################################################
+
+class TrodesSimSendInterface(base.StandardMPISendInterface):
+
+    def __init__(self, comm, rank, config):
+        super().__init__(comm, rank, config)
+
+    def send_shutdown(self):
+
+        self.comm.send(
+            obj=messages.TerminateSignal(),
+            dest=self.config['rank']['supervisor'][0],
+            tag=messages.MPIMessageTag.COMMAND_MESSAGE
+        )
+
+####################################################################################
+# Trodes network objects
+####################################################################################
 
 class TrodesSimSubscriber(logging_base.LoggingClass):
 
@@ -212,37 +238,41 @@ class TrodesSimServer(logging_base.LoggingClass):
             f"{self._pos_sock.get_string(zmq.LAST_ENDPOINT)}"
         )
 
-    def send_spike_data(self, spike_obj:TrodesSpikeSample):
+    def send_spike_data(self, spike_objs:List[TrodesSpikeSample]):
         # make sure all quantities are converted into Python
         # native types
-        self._spike_data['localTimestamp'] = int(spike_obj.timestamp)
-        self._spike_data['systemTimestamp'] = time.time_ns()
-        self._spike_data['nTrodeId'] = int(spike_obj.elec_grp_id)
-        self._spike_data['samples'] = spike_obj.data.tolist()
 
-        # print(f"Sending spike ntrode {int(spike_obj.elec_grp_id)}, timestamp {int(spike_obj.timestamp)}")
+        for spike_obj in spike_objs:
+            self._spike_data['localTimestamp'] = int(spike_obj.timestamp)
+            self._spike_data['systemTimestamp'] = time.time_ns()
+            self._spike_data['nTrodeId'] = int(spike_obj.elec_grp_id)
+            self._spike_data['samples'] = spike_obj.data.tolist()
 
-        self._spike_sock.send(msgpack.packb(self._spike_data))
+            # print(f"Sending spike ntrode {int(spike_obj.elec_grp_id)}, timestamp {int(spike_obj.timestamp)}")
 
-    def send_lfp_data(self, lfp_arr:np.ndarray):
-        self._lfp_data['localTimestamp'] = int(lfp_arr['time'])
-        self._lfp_data['systemTimestamp'] = time.time_ns()
-        self._lfp_data['lfpData'] = lfp_arr['lfp'].tolist()
+            self._spike_sock.send(msgpack.packb(self._spike_data))
 
-        self._lfp_sock.send(msgpack.packb(self._lfp_data))
+    def send_lfp_data(self, lfp_arrs:List[np.ndarray]):
 
-    def send_pos_data(self, pos_arr:np.ndarray):
+        for lfp_arr in lfp_arrs:
+            self._lfp_data['localTimestamp'] = int(lfp_arr['time'])
+            self._lfp_data['systemTimestamp'] = time.time_ns()
+            self._lfp_data['lfpData'] = lfp_arr['lfp'].tolist()
 
-        self._pos_data['timestamp'] = int(pos_arr['time'])
-        self._pos_data['lineSegment'] = int(pos_arr['segment'])
-        self._pos_data['posOnSegment'] = int(pos_arr['segment_pos'])
-        self._pos_data['x'] = int(pos_arr['xloc'])
-        self._pos_data['y'] = int(pos_arr['yloc'])
-        self._pos_data['x2'] = int(pos_arr['xloc2'])
-        self._pos_data['y2'] = int(pos_arr['yloc2'])
+            self._lfp_sock.send(msgpack.packb(self._lfp_data))
 
-        self._pos_sock.send(msgpack.packb(self._pos_data))
+    def send_pos_data(self, pos_arrs:List[np.ndarray]):
 
+        for pos_arr in pos_arrs:
+            self._pos_data['timestamp'] = int(pos_arr['time'])
+            self._pos_data['lineSegment'] = int(pos_arr['segment'])
+            self._pos_data['posOnSegment'] = int(pos_arr['segment_pos'])
+            self._pos_data['x'] = int(pos_arr['xloc'])
+            self._pos_data['y'] = int(pos_arr['yloc'])
+            self._pos_data['x2'] = int(pos_arr['xloc2'])
+            self._pos_data['y2'] = int(pos_arr['yloc2'])
+
+            self._pos_sock.send(msgpack.packb(self._pos_data))
 
 class TrodesClientStub(object):
 
@@ -255,6 +285,9 @@ class TrodesClientStub(object):
     def receive(self):
         pass
 
+####################################################################################
+# Data handlers/managers
+####################################################################################
 
 class TrodesFileReader(logging_base.LoggingClass, metaclass=ABCMeta):
 
@@ -269,7 +302,6 @@ class TrodesPosReader(TrodesFileReader):
         super().__init__(config)
         self._data = None # when populated, will be numpy record array
         self._curr_ind = 0
-        self._pos_arr = None
 
     def _load_pos(self):
 
@@ -343,15 +375,16 @@ class TrodesPosReader(TrodesFileReader):
 
     def get_data_at_timestamp(self, ts):
 
+        ready_data = []
+
         try:
-            if self._data[self._curr_ind]['time'] == ts:
-                self._pos_arr = self._data[self._curr_ind]
+            while self._data[self._curr_ind]['time'] == ts:
+                ready_data.append(self._data[self._curr_ind])
                 self._curr_ind += 1
-                return self._pos_arr
-            else:
-                return None
         except IndexError:
-            raise StopIteration()
+            return None
+
+        return ready_data
 
 
 class TrodesSpikesReader(TrodesFileReader):
@@ -439,20 +472,21 @@ class TrodesSpikesReader(TrodesFileReader):
 
     def get_data_at_timestamp(self, ts):
 
+        ready_data = []
+
         try:
-            if self._spike_datas[self._curr_ind].timestamp == ts:
+            while self._spike_datas[self._curr_ind].timestamp == ts:
                 # print(
                 #     f"Timestamp {ts}, "
                 #     f"current timestamp {self._spike_datas[self._curr_ind].timestamp}, "
                 #     f"next timesttamp {self._spike_datas[self._curr_ind+1].timestamp}"
                 # )
-                self._spike_obj = self._spike_datas[self._curr_ind]
+                ready_data.append(self._spike_datas[self._curr_ind])
                 self._curr_ind += 1
-                return self._spike_obj
-            else:
-                return None
         except IndexError:
-            return None
+            pass
+
+        return ready_data
 
 
 class TrodesLFPReader(TrodesFileReader):
@@ -461,7 +495,6 @@ class TrodesLFPReader(TrodesFileReader):
         super().__init__(config)
         self._data = None # when populated, will be a numpy record array
         self._curr_ind = 0
-        self._lfp_arr = None
 
     def _load_timestamps(self):
         ts_file = utils.find_unique_file(
@@ -555,15 +588,16 @@ class TrodesLFPReader(TrodesFileReader):
 
     def get_data_at_timestamp(self, ts):
 
+        ready_data = []
+
         try:
-            if self._data[self._curr_ind]['time'] == ts:
-                self._lfp_arr = self._data[self._curr_ind]
+            while self._data[self._curr_ind]['time'] == ts:
+                ready_data.append(self._data[self._curr_ind])
                 self._curr_ind += 1
-                return self._lfp_arr
-            else:
-                return None
         except IndexError:
-            return None
+            pass
+
+        return ready_data
 
 
 class TrodesSimManager(base.MessageHandler):
@@ -602,6 +636,7 @@ class TrodesSimManager(base.MessageHandler):
             )
             self._startup()
         elif isinstance(msg, messages.VerifyStillAlive):
+            self.class_log.info("Got request to verify still alive")
             self._send_interface.send_alive_message()
         elif isinstance(msg, messages.TerminateSignal):
             self.class_log.info(f"Got terminate signal from rank {source_rank}")
@@ -683,7 +718,7 @@ class TrodesSimManager(base.MessageHandler):
             num_to_process = num_expected - self._num_samples_processed
             for n in range(num_to_process):
                 simulated_ts = self._num_samples_processed + n + self._offset
-                self._send_data_if_ready(simulated_ts)
+                self._send_data_ready_data(simulated_ts)
                 self._switch_task_if_ready(simulated_ts)
 
             self._num_samples_processed += num_to_process
@@ -695,25 +730,28 @@ class TrodesSimManager(base.MessageHandler):
             #         f"elapsed time: {(time.time_ns() - self._t0)/1e9} seconds"
             #     )
 
-    def _send_data_if_ready(self, simulated_ts):
+    def _send_data_ready_data(self, simulated_ts):
 
-        pos_obj = self._pos_reader.get_data_at_timestamp(
+        # start and end timestamp bounds are determined by the position
+        # data. if we've reached the end of data (a None return value)
+        # then we stop the system
+        pos_objs = self._pos_reader.get_data_at_timestamp(
             simulated_ts
         )
-        if pos_obj is not None:
-            self._sim_server.send_pos_data(pos_obj)
+        if pos_objs is None:
+            self._request_termination()
+        else:
+            self._sim_server.send_pos_data(pos_objs)
 
-        spikes_obj = self._spikes_reader.get_data_at_timestamp(
+        spikes_objs = self._spikes_reader.get_data_at_timestamp(
             simulated_ts
         )
-        if spikes_obj is not None:
-            self._sim_server.send_spike_data(spikes_obj)
+        self._sim_server.send_spike_data(spikes_objs)
 
-        lfp_obj = self._lfp_reader.get_data_at_timestamp(
+        lfp_objs = self._lfp_reader.get_data_at_timestamp(
             simulated_ts
         )
-        if lfp_obj is not None:
-            self._sim_server.send_lfp_data(lfp_obj)
+        self._sim_server.send_lfp_data(lfp_objs)
 
     def _switch_task_if_ready(self, simulated_ts):
 
@@ -722,6 +760,9 @@ class TrodesSimManager(base.MessageHandler):
             utils.write_text_file(taskfile, 2)
             self.class_log.info("Setting task state to 2")
 
+    def _request_termination(self):
+        self._send_interface.send_shutdown()
+
 
 class TrodesSimProcess(base.RealtimeProcess):
 
@@ -729,7 +770,7 @@ class TrodesSimProcess(base.RealtimeProcess):
         super().__init__(comm, rank, config)
 
         self._trodes_sim_manager = TrodesSimManager(
-            rank, config, base.StandardMPISendInterface(comm, rank, config),
+            rank, config, TrodesSimSendInterface(comm, rank, config),
             TrodesSimServer(config)
         )
 
