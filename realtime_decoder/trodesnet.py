@@ -101,10 +101,7 @@ class TrodesDataReceiver(DataSourceReceiver):
             return
         
         if self.datatype == Datatypes.LFP:
-            self.inds_to_extract = utils.get_ntrode_inds(
-                self.config['trodes']['config_file'],
-                self.ntrode_ids
-            )
+            self.inds_to_extract = utils.get_ntrode_inds(self.config, self.ntrode_ids)
 
         self.class_log.debug(
             f"Set up to stream from ntrode ids {self.ntrode_ids}"
@@ -119,9 +116,7 @@ class TrodesDataReceiver(DataSourceReceiver):
         else:
             name = 'source.position'
 
-        server_address = utils.get_network_address(
-            self.config['trodes']['config_file']
-        )
+        server_address = utils.get_network_address(self.config)
         if server_address is None:
             self.sub_obj = SourceSubscriber(name)
         else:
@@ -142,7 +137,7 @@ class TrodesClient(object):
         self._startup_callback = utils.nop
         self._termination_callback = utils.nop
 
-        server_address = utils.get_network_address(config['trodes']['config_file'])
+        server_address = utils.get_network_address(config)
         self._acq_sub = TrodesAcquisitionSubscriber(server_address=server_address)
         self._trodes_hardware = TrodesHardware(server_address=server_address)
 
