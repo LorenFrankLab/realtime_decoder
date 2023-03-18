@@ -718,7 +718,7 @@ class TrodesSimManager(base.MessageHandler):
             num_to_process = num_expected - self._num_samples_processed
             for n in range(num_to_process):
                 simulated_ts = self._num_samples_processed + n + self._offset
-                self._send_data_ready_data(simulated_ts)
+                self._send_data_if_ready(simulated_ts)
                 self._switch_task_if_ready(simulated_ts)
 
             self._num_samples_processed += num_to_process
@@ -730,7 +730,7 @@ class TrodesSimManager(base.MessageHandler):
             #         f"elapsed time: {(time.time_ns() - self._t0)/1e9} seconds"
             #     )
 
-    def _send_data_ready_data(self, simulated_ts):
+    def _send_data_if_ready(self, simulated_ts):
 
         # start and end timestamp bounds are determined by the position
         # data. if we've reached the end of data (a None return value)
