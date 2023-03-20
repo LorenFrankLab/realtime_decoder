@@ -5,7 +5,7 @@ import numpy as np
 
 from realtime_decoder import (
     base, utils, position, messages, transitions,
-    binary_record
+    binary_record, taskstate
 )
 
 ####################################################################################
@@ -408,6 +408,9 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._duplicate_spikes = 0
 
         self._task_state = 1
+        self._task_state_handler = taskstate.TaskStateHandler(
+            self._config
+        )
         self._save_early = True
 
         self._spike_msg_ct = 0
@@ -526,7 +529,6 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
     def _init_params(self):
 
         self.p = {}
-        self.p['taskstate_file'] = self._config.get('trodes').get('taskstate_file')
         self.p['algorithm'] = self._config['algorithm']
         self.p['preloaded_model'] = self._config['preloaded_model']
         self.p['frozen_model'] = self._config['frozen_model']
@@ -598,12 +600,11 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         self._pos_timestamp = pos_msg.timestamp
 
-        if (
-            self._pos_ct % self.p['num_pos_points'] == 0 and
-            self.p["taskstate_file"] is not None
-        ):
+        if self._pos_ct % self.p['num_pos_points'] == 0:
 
-            self._task_state = utils.get_last_num(self.p['taskstate_file'])
+            self._task_state = self._task_state_handler.get_task_state(
+                self._pos_timestamp
+            )
 
         # calculate velocity using the midpoints
         xmid = (pos_msg.x + pos_msg.x2)/2

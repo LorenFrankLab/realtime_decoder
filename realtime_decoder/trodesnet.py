@@ -30,7 +30,8 @@ class TrodesDataReceiver(DataSourceReceiver):
 
         self.ntrode_ids = [] # only applicable for spikes and LFP
         self.inds_to_extract = [] # only applicable for LFP
-        self.sfact = self.config["trodes"]["voltage_scaling_factor"]
+        self.source = self.config['datasource']
+        self.sfact = self.config[self.source]["voltage_scaling_factor"]
 
         self.temp_data = None
 
@@ -102,7 +103,7 @@ class TrodesDataReceiver(DataSourceReceiver):
         
         if self.datatype == Datatypes.LFP:
             self.inds_to_extract = utils.get_ntrode_inds(
-                self.config['trodes']['config_file'],
+                self.config[self.source]['config_file'],
                 self.ntrode_ids
             )
 
@@ -120,7 +121,7 @@ class TrodesDataReceiver(DataSourceReceiver):
             name = 'source.position'
 
         server_address = utils.get_network_address(
-            self.config['trodes']['config_file']
+            self.config[self.source]['config_file']
         )
         if server_address is None:
             self.sub_obj = SourceSubscriber(name)
@@ -142,7 +143,9 @@ class TrodesClient(object):
         self._startup_callback = utils.nop
         self._termination_callback = utils.nop
 
-        server_address = utils.get_network_address(config['trodes']['config_file'])
+        server_address = utils.get_network_address(
+            config[config['datasource']]['config_file']
+        )
         self._acq_sub = TrodesAcquisitionSubscriber(server_address=server_address)
         self._trodes_hardware = TrodesHardware(server_address=server_address)
 

@@ -8,7 +8,7 @@ from mpi4py import MPI
 from typing import Sequence, List
 
 from realtime_decoder import (
-    base, utils, position, datatypes, messages, binary_record
+    base, utils, position, datatypes, messages, binary_record, taskstate
 )
 
 ####################################################################################
@@ -301,6 +301,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._times_ind = {}
 
         self._task_state = 1
+        self._task_state_handler = taskstate.TaskStateHandler(self._config)
         self._save_early = True
 
         self._pos_counter = 0
@@ -351,7 +352,6 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
     def _init_params(self):
 
         self.p = {}
-        self.p['taskstate_file'] = self._config.get('trodes').get('taskstate_file')
         self.p['num_bins'] = self._config['encoder']['position']['num_bins']
         self.p['spk_amp'] = self._config['encoder']['spk_amp']
         self.p['preloaded_model'] = self._config['preloaded_model']
@@ -496,12 +496,11 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         self._pos_timestamp = pos_msg.timestamp
 
-        if (
-            self._pos_counter % self.p['num_pos_points'] == 0 and
-            self.p["taskstate_file"] is not None
-        ):
+        if self._pos_counter % self.p['num_pos_points'] == 0:
 
-            self._task_state = utils.get_last_num(self.p['taskstate_file'])
+            self._task_state = self._task_state_handler.get_task_state(
+                self._pos_timestamp
+            )
 
         #################################################################################################################
         # debugging, remove when done

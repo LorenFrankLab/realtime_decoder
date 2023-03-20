@@ -3,7 +3,7 @@ import numpy as np
 
 from copy import deepcopy
 
-from realtime_decoder import base, utils, messages, binary_record
+from realtime_decoder import base, utils, messages, binary_record, taskstate
 
 class StimDeciderSendInterface(base.MPISendInterface):
 
@@ -120,6 +120,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._trodes_client = trodes_client
 
         self._task_state = 1
+        self._task_state_handler = taskstate.TaskStateHandler(self._config)
         self._num_rewards = np.zeros(
             len(self._config['encoder']['position']['arm_coords']),
             dtype='=i4'
@@ -381,8 +382,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._update_head_direction(msg)
 
         if self._pos_msg_ct % self.p['num_pos_points'] == 0:
-            self._task_state = utils.get_last_num(
-                self.p['taskstate_file']
+            self._task_state = self._task_state_handler.get_task_state(
+                msg[0]['timestamp']
             )
 
         if self._pos_msg_ct % self.p['num_pos_disp'] == 0:
@@ -1139,8 +1140,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
     def _init_params(self):
 
         self.p = {}
-        self.p['taskstate_file'] = self._config['trodes']['taskstate_file']
-        self.p['instructive_file'] = self._config['trodes']['instructive_file']
+        self.p['instructive_file'] = self._config[self._config['datasource']]['instructive_file']
         self.p['scale_factor'] = self._config['kinematics']['scale_factor']
         self.p['instructive'] = self._config['stimulation']['instructive']
         # self.p['reward_mode'] = self._config['stimulation']['reward_mode']
