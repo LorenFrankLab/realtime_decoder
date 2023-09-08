@@ -1,8 +1,10 @@
 import os
 from realtime_decoder import logging_base, utils
 
+"""Contains objects for dealing with the task state"""
 
 class TaskStateHandler(logging_base.LoggingClass):
+    """An object that gets the current task state"""
 
     def __init__(self, config):
         super().__init__()
@@ -36,6 +38,11 @@ class TaskStateHandler(logging_base.LoggingClass):
             pass
 
     def get_task_state(self, timestamp):
+
+        """Determine the current task state. If a data source other
+        than Trodes is being used, this method always returns a task
+        state of 1 (this is to support compatibility with other data
+        acquisition systems)"""
 
         source = self.config['datasource']
         if source == 'trodes':

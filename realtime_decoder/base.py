@@ -8,20 +8,23 @@ from realtime_decoder import (
     binary_record, messages, datatypes
 )
 
+"""
+Contains base objects used extensively throughout
+"""
+
 class MessageHandler(LoggingClass, metaclass=ABCMeta):
-    """Base class for object that handles messages passed
-    between processes
+    """A base object that handles messages passed between processes
     """
     def __init__(self):
         super().__init__()
 
     @abstractmethod
     def handle_message(self, msg, mpi_status:MPI.Status):
+        """Abstract method for handling messages"""
         pass
 
 class MPIClass(LoggingClass):
-    """Base class for object that can send and/or receive MPI
-    messages
+    """A base object that can send and/or receive MPI messages
     """
     def __init__(self, comm:MPI.Comm, rank:int, config:Dict):
         self.comm = comm
@@ -30,7 +33,7 @@ class MPIClass(LoggingClass):
         super().__init__()
 
 class MPIRecvInterface(MPIClass, metaclass=ABCMeta):
-    """Base class for object that can receive MPI messages
+    """A base object that can receive MPI messages
     """
 
     def __init__(self, comm, rank, config):
@@ -41,7 +44,7 @@ class MPIRecvInterface(MPIClass, metaclass=ABCMeta):
         pass
 
 class StandardMPIRecvInterface(MPIRecvInterface):
-    """Used to receive MPI messages with a given tag
+    """A base object that receives MPI messages with a given tag
     """
 
     def __init__(
@@ -75,10 +78,12 @@ class MPISendInterface(MPIClass, metaclass=ABCMeta):
 
     @abstractmethod
     def send_record_register_messages(self):
+        """Abstract method for sending binary record information
+        that should be registered"""
         pass
 
 class StandardMPISendInterface(MPISendInterface):
-    """Used to send MPI messages
+    """A base object that sends MPI messages
     """
 
     def __init__(self, comm:MPI.Comm, rank:int, config:Dict):
@@ -131,6 +136,8 @@ class RealtimeProcess(MPIClass, metaclass=ABCMeta):
 
     @abstractmethod
     def main_loop(self):
+        """Abstract method for the while loop that a process
+        should run"""
         pass
 
 
@@ -289,84 +296,67 @@ class BinaryRecordBase(LoggingClass, metaclass=ABCMeta):
     
 
 class DataSourceReceiver(MPIClass, metaclass=ABCMeta):
-    """An abstract class that ranks should use to communicate between neural data sources.
+    """An abstract class that ranks should use to communicate between
+    neural data sources.
 
     This class should not be instantiated, only its subclasses.
-
-    This provides an abstraction layer for sources of neural data (e.g., saved file simulator, acquisition system)
-    to pipe data (e.g., spikes, lfp, position) to ranks that request data for processing.  This is only an abstraction
-    for a streaming data (e.g. sockets, MPI) and makes a number of assumptions:
-
-    1. The type of data and 'channel' (e.g., electrode channels 1, 2, 3) can be streamed to different client processes
-    and registered by a client one channel at a time
-
-    2. The streams can be started and stopped arbitrarily after the connection is established (no rule if data is lost
-    during pause)
-
-    3. The connection is destroyed when the iterator stops.
     """
 
     def __init__(self, comm, rank, config, datatype:datatypes.Datatypes):
-        """
 
-        Args:
-            comm:
-            rank:
-            config:
-            datatype: The type of data to request to be streamed, specified by spykshrk.realtime.datatypes.Datatypes
-            *args:
-            **kwds:
-        """
         super().__init__(comm, rank, config)
         self.datatype = datatype
 
     @abstractmethod
     def register_datatype_channel(self, channel):
-        """
-
-        Args:
-            channel: The channel of the data type to stream
-
-        Returns:
-            None
-
-        """
+        """"""
         pass
 
     @abstractmethod
     def activate(self):
+        """Activate datastream such that valid data may be (i.e. if available)
+        returned"""
         pass
 
     @abstractmethod
     def deactivate(self):
+        """Deactivate datastream such that no data sample will be returned"""
         pass
 
     @abstractmethod
     def stop_iterator(self):
+        """Stop streaming data altogether"""
         pass
 
     @abstractmethod
     def __next__(self):
+        """Return the next data sample, if it is ready"""
         pass
 
 class Decoder(LoggingClass, metaclass=ABCMeta):
+    """Base class for object that implements a decoding algorithm"""
 
     def __init__(self):
         super().__init__()
 
     @abstractmethod
     def add_observation(self):
+        """Add new observation to the decoder"""
         pass
 
     @abstractmethod
     def update_position(self):
+        """Update current estimate of the position"""
         pass
 
 class PositionMapper(LoggingClass, metaclass=ABCMeta):
+    """Base class for object that maps position from one coordinate
+    system to another"""
 
     def __init__(self):
         super().__init__()
 
     @abstractmethod
     def map_position(self):
+        """Map position from one coordinate system to another"""
         pass

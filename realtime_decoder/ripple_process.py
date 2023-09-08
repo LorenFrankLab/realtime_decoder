@@ -18,11 +18,14 @@ from realtime_decoder import (
 ####################################################################################
 
 class RippleMPISendInterface(base.StandardMPISendInterface):
+    """Sending interface object for ripple_process"""
 
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
 
     def send_lfp_timestamp(self, timestamp):
+        """Send an LFP timestamp to the decoder processes"""
+
         for r in self.config['rank']['decoders']:
             self.comm.send(
                 timestamp, dest=r,
@@ -30,22 +33,27 @@ class RippleMPISendInterface(base.StandardMPISendInterface):
             )
 
     def send_ripple(self, dest, msg):
+        """Send a ripple event message"""
+
         self.comm.Send(
             buf=msg.tobytes(),
             dest=dest,
             tag=messages.MPIMessageTag.RIPPLE_DETECTION
         )
+
 ####################################################################################
 # Data handlers/managers
 ####################################################################################
-    
+
 class EnvelopeEstimator(base.LoggingClass):
+    """Estimates the ripple power envelope"""
 
     def __init__(self, config):
         super().__init__()
         self._config = config
 
     def initialize_filters(self, num_signals:int):
+        """Initialize ripple-band filters"""
 
         # set up ripple band filter
         filt = self._config['ripples']['filter']['type']
@@ -90,7 +98,9 @@ class EnvelopeEstimator(base.LoggingClass):
         self._x_env = np.zeros((self._b_env.shape[0], num_signals))
 
     def add_new_data(self, data):
-        
+        """Add new data point and obtain new estimate of the
+        ripple-band filtered data and the envelope"""
+
         # filter to ripple band
         if self._a_ripple is not None: # IIR
             ns = self._a_ripple.shape[0]
@@ -123,6 +133,8 @@ class EnvelopeEstimator(base.LoggingClass):
         return ripple_data, env
 
 class RippleManager(base.BinaryRecordBase, base.MessageHandler):
+    """Manager class that handles MPI messsages and delegates ripple
+    envelope estimation, among other functions"""
 
     def __init__(
         self, rank, config, send_interface, lfp_interface,
@@ -204,7 +216,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
 
     def handle_message(self, msg, mpi_status):
-        
+        """Process a (non neural data) received MPI message"""
+
         if isinstance(msg, messages.TrodeSelection):
             trodes = msg.trodes
             self.class_log.debug(f"Registering continuous channels: {trodes}")
@@ -217,7 +230,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
                 self._lfp_interface.register_datatype_channel(trode)
                 self._trode_ind_map[trode] = ii
-            
+
             # initialize filters too!
             self._envelope_estimator.initialize_filters(len(trodes))
             self._reset_data(trodes)
@@ -247,6 +260,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def next_iter(self):
+        """Run one iteration processing any available neural data"""
+
         lfp_msg = self._lfp_interface.__next__()
         if lfp_msg is not None:
             t0 = time.time_ns()
@@ -263,6 +278,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             self._process_pos(pos_msg)
 
     def _process_lfp(self, msg):
+        """Process a new LFP data sample"""
 
         msg_data = msg.data
         msg_timestamp = msg.timestamp
@@ -325,6 +341,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             self.class_log.debug(f"Received {self._lfp_count} lfp points")
 
     def _process_pos(self, pos_msg):
+        """Process a new position data sample"""
 
         if pos_msg.timestamp <= self._pos_timestamp:
             self.class_log.warning(
@@ -354,6 +371,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         trode, datapoint, mean, sigma,
         lockout_sample, is_consensus_trace
     ):
+        """Determine whether the start or end of a ripple has occurred"""
 
         in_standard_ripple = self._in_ripple[trode]['standard']
         in_cond_ripple = self._in_ripple[trode]['cond']
@@ -384,7 +402,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
                 lockout_sample += 1
                 in_standard_ripple = True
-        
+
         else: # we are currently in a ripple
 
             lockout_sample += 1
@@ -436,7 +454,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                     timestamp, trode, mean, sigma,
                     t_send_data, t_recv_data, time.time_ns(),
                     True, is_consensus_trace, tup
-                ) 
+                )
 
             if lockout_sample >= self.p['max_ripple_samples']:
 
@@ -450,7 +468,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                     timestamp, trode, mean, sigma,
                     t_send_data, t_recv_data, time.time_ns(),
                     False, is_consensus_trace, tup
-                ) 
+                )
 
         return lockout_sample, in_standard_ripple, in_cond_ripple, in_content_ripple
 
@@ -458,6 +476,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self, timestamp, elec_grp_id, ripple_type,
         is_consensus
     ):
+        """Send a message that a ripple event was detected"""
+
         self._ripple_msg[0]['timestamp'] = timestamp
         self._ripple_msg[0]['elec_grp_id'] = elec_grp_id
         self._ripple_msg[0]['ripple_type'] = ripple_type
@@ -474,6 +494,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         t_sys, is_normal_end, is_consensus_trace,
         condition_tuple
     ):
+        """Processing that occurs when the end of a ripple
+        is detected"""
 
         # sending message gets first priority
         self._send_ripple_message(
@@ -506,10 +528,13 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         return 0, False, False, False
 
     def _update_decoder(self):
+        """Notify decoder of a new time bin edge/boundary"""
+
         # self.class_log.info(f"Sending timestamp {self._lfp_timestamp}")
         self.send_interface.send_lfp_timestamp(self._lfp_timestamp)
 
     def _reset_data(self, trodes:List):
+        """Reset data keeping track of ripple events"""
 
         self._reset_stats(trodes)
 
@@ -532,6 +557,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             self._lockout_sample[trode] = 0
 
     def _reset_stats(self, trodes:List):
+        """Reset the statistics keeping track of the mean and standard
+        deviation of the ripple envelope"""
 
         num_signals = len(trodes)
         # stats for individual traces
@@ -547,6 +574,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self._cons_count = 0
 
     def _seed_stats(self, trodes:List):
+        """Seed statistics keeping track of the mean and standard deviation
+        of the ripple envelope"""
 
         for trode in trodes:
 
@@ -571,6 +600,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             pass
 
     def _compute_lfp_send_interval(self):
+        """Find out how many LFP samples make up one time bin, where
+        the time bin size is a configurable option"""
 
         ds, rem = divmod(
             self._config['sampling_rate']['spikes'],
@@ -595,6 +626,9 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         return n_lfp_samples
 
     def _init_timings(self):
+        """Initialize objects that are used for keeping track of
+        timing information"""
+
         dt = np.dtype([
             ('ripple_rank', '=i4'),
             ('timestamp', '=i8'),
@@ -614,6 +648,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self, timestamp, t_send_data, t_recv_data,
         t_start, t_end, num_traces
     ):
+        """Record timing information for a processed LFP sample"""
 
         ind = self._times_ind
 
@@ -636,6 +671,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self._times_ind += 1
 
     def _init_params(self):
+        """Initialize parameters used by this object"""
+
         self.p = {}
 
         self.p['smooth_x'] = self._config['kinematics']['smooth_x']
@@ -664,6 +701,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def _update_gui_params(self, gui_msg):
+        """Update parameters that can be changed by the GUI"""
+
         self.class_log.info("Updating GUI ripple parameters")
         self.p['vel_thresh'] = gui_msg.velocity_threshold
         self.p['standard_thresh'] = gui_msg.ripple_threshold
@@ -673,6 +712,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['freeze_stats'] = gui_msg.freeze_stats
 
     def finalize(self):
+        """Final method called before exiting the main data processing loop"""
+
         filename = os.path.join(
             self._config['files']['output_dir'],
             f"{self._config['files']['prefix']}_ripples_rank_{self.rank}." +
@@ -687,6 +728,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 ####################################################################################
 
 class RippleProcess(base.RealtimeProcess):
+    """Top level object for ripple_process"""
 
     def __init__(self, comm, rank, config, lfp_interface, pos_interface):
         super().__init__(comm, rank, config)
@@ -709,6 +751,7 @@ class RippleProcess(base.RealtimeProcess):
         )
 
     def main_loop(self):
+        """Main data processing loop"""
 
         try:
             self._ripple_manager.setup_mpi()

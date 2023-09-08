@@ -4,7 +4,11 @@ from typing import List
 
 from realtime_decoder import base, datatypes
 
+"""Contains objects relevant to handling position data"""
+
 class PositionBinStruct(object):
+    """Object for dealing with position bins"""
+
     def __init__(self, lower_bound, upper_bound, num_bins:int):
 
         self.pos_range = [lower_bound, upper_bound]
@@ -16,13 +20,21 @@ class PositionBinStruct(object):
         self.pos_bin_delta = self.pos_bin_centers[1] - self.pos_bin_centers[0]
 
     def which_bin(self, pos):
+        """Find which position bin a given position belongs in.
+        Legacy method that isn't used anymore"""
+
         return np.nonzero(np.diff(self._pos_bin_edges > pos))
 
     def get_bin(self, pos):
 
+        """Find which position bin a given position belongs in."""
+
         return int((pos - self.pos_range[0])/self.pos_bin_delta)
 
 class TrodesPositionMapper(base.PositionMapper):
+
+    """Maps data obtained from a Trodes camera module into
+    a position bin"""
 
     def __init__(self, arm_ids:List[int], arm_coords:List[List]):
 
@@ -42,8 +54,10 @@ class TrodesPositionMapper(base.PositionMapper):
             self._bin_info[arm_ind]['bins'] = np.arange(a, b+1)
             self._bin_info[arm_ind]['norm_edges'] = np.linspace(0, 1, (b-a+1)+1)
 
-
     def map_position(self, datapoint:datatypes.CameraModulePoint):
+
+        """Maps data from a Trodes camera module datapoint into a
+        position bin"""
 
         segment = datapoint.segment
         segment_pos = datapoint.position
@@ -65,6 +79,9 @@ class TrodesPositionMapper(base.PositionMapper):
 
 
 class KinematicsEstimator(object):
+
+    """Object used to estimate position and speed, can also
+    smooth the estimates using an FIR filter"""
 
     def __init__(
         self, *, scale_factor=1, dt=1,
@@ -90,6 +107,8 @@ class KinematicsEstimator(object):
         self, x, y, *, smooth_x=False,
         smooth_y=False, smooth_speed=False
     ):
+
+        """Estimate x position, y position, and the speed"""
 
         # very first datapoint
         if self._last_speed == -1:
@@ -121,6 +140,8 @@ class KinematicsEstimator(object):
         return xv, yv, sv
 
     def _smooth(self, newval, coefs, buf):
+
+        """Smooths data using an FIR filter"""
 
         # mutates data!
         buf[1:] = buf[:-1]

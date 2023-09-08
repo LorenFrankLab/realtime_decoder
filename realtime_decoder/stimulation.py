@@ -5,12 +5,23 @@ from copy import deepcopy
 
 from realtime_decoder import base, utils, messages, binary_record, taskstate
 
+
+"""Contains objects relevant to detecting if stimulation
+should be given"""
+
 class StimDeciderSendInterface(base.MPISendInterface):
+
+    """The interface object a stim decider uses to communicate with
+    other processes
+    """
 
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
 
     def send_num_rewards(self, num_rewards_arr):
+        """Sends the GUI information about the number of rewards
+        dispensed for each maze arm"""
+
         self.comm.Send(
             buf=num_rewards_arr,
             dest=self.config['rank']['gui'][0],
@@ -18,12 +29,19 @@ class StimDeciderSendInterface(base.MPISendInterface):
         )
 
     def send_record_register_messages(self):
+        """Raises error as an override of the base object's
+        'send_record_register_messages()' since this inherited
+        object does not send record registration messages to the
+        main process"""
+
         raise NotImplementedError(
             f"This class does not send record registration messages "
             "to the main process"
         )
 
 class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
+    """Custom stimulation decider for a two-arm maze where Trodes is the
+    data acquisition software"""
 
     def __init__(self, comm, rank, config, trodes_client):
 
@@ -163,6 +181,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._init_params()
 
     def handle_message(self, msg, mpi_status):
+        """Process a (non neural data) received MPI message"""
 
         # feedback, velocity/position, posterior
         if isinstance(msg, messages.GuiMainParameters):
@@ -181,6 +200,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def _update_gui_params(self, gui_msg):
+        """Update parameters that can be changed by the GUI"""
+
         self.class_log.info("Updating GUI main parameters")
 
         # manual control of the replay target arm is only allowed
@@ -204,6 +225,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p_head['enabled'] = gui_msg.head_direction_stim_enabled
 
     def _update_ripples(self, msg):
+        """Update current ripple state"""
 
         if msg[0]['is_consensus']:
             self._update_cons_ripple_status(msg)
@@ -211,6 +233,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self._update_ripple_status(msg)
 
     def _update_ripple_status(self, msg):
+        """Update ripple state for electrode group-based ripple detection"""
 
         ts = msg[0]['timestamp']
         trode = msg[0]['elec_grp_id']
@@ -312,6 +335,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
 
     def _update_cons_ripple_status(self, msg):
+        """Update ripple state for consensus trace-based ripple detection"""
 
         ts = msg[0]['timestamp']
         trode = msg[0]['elec_grp_id']
@@ -373,6 +397,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 # )
 
     def _update_velocity_position(self, msg):
+        """Update data relevant to a new position & velocity data point"""
 
         self._pos_msg_ct += 1
 
@@ -398,6 +423,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def _update_head_direction(self, msg):
+        """Compute head direction angles and stimulate for a head
+        direction event if enabled"""
 
         angle, angle_well_1, angle_well_2 = self._compute_angles(
             msg
@@ -505,6 +532,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
 
     def _compute_angles(self, msg):
+        """Compute head direction angles relative to the reward wells"""
+
         x1 = msg[0]['raw_x']
         y1 = msg[0]['raw_y']
         x2 = msg[0]['raw_x2']
@@ -542,6 +571,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         return head_angle, angle_well_1, angle_well_2
 
     def _update_posterior(self, msg):
+        """Handle a message containing posterior data"""
 
         # set various indices and counts
         self._dec_ind = self._decoder_rank_ind_map[msg[0]['rank']]
@@ -564,6 +594,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._decoder_count[self._dec_ind] += 1
 
     def _update_spike_stats(self, msg):
+        """Update spiking statistics"""
 
         ind = self._dec_ind
 
@@ -581,6 +612,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def _update_mua_stats(self, ind, msg):
+        """Update MUA-based spiking rates"""
 
         spike_rate = msg[0]['spike_count'] / self._dt
 
@@ -604,6 +636,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._detect_mua_events(ind, spike_rate)
 
     def _detect_mua_events(self, ind, spike_rate):
+        """Detect MUA burst events"""
 
         N = self.p['mua_window']
         self._mua_buf[ind, self._decoder_count[ind] % N] = spike_rate
@@ -638,6 +671,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             self._in_burst[ind] = False
 
     def _update_decode_stats(self, msg):
+        """Update statistics based on new data containing
+        posterior and likelihood estimates"""
 
         ind = self._dec_ind
 
@@ -663,6 +698,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._update_prob_sums(marginal_prob)
 
     def _update_prob_sums(self, marginal_prob):
+        """Compute probability sums for specific regions in the maze"""
 
         ind = self._dec_ind
 
@@ -684,6 +720,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._region_ps_base_buff[ind, self._dd_ind, 2] = ps_arm2_base
 
     def _compute_arm_probs(self, prob):
+        """Compute the probability sum for each maze arm"""
 
         arm_probs = np.zeros(len(self.p['arm_coords']))
         for ii, (a, b) in enumerate(self.p['arm_coords']):
@@ -692,7 +729,13 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         return arm_probs
 
     def _compute_region_probs(self, prob):
+        """Compute probability sums for specific regions in the maze"""
 
+        # The particular two-arm maze this object was written for
+        # does not change its topology, hence the hard-coding.
+        # Nevertheless it might be useful to eventually make
+        # this configurable if the position bin size changes,
+        # for example
         ps_arm1 = prob[20:25].sum()
         ps_arm2 = prob[36:41].sum()
         ps_arm1_base = prob[13:18].sum()
@@ -701,6 +744,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         return ps_arm1, ps_arm2, ps_arm1_base, ps_arm2_base
 
     def _find_replay(self, msg):
+        """Look for a replay event for a noninstructive task"""
 
         ts = msg[0]['bin_timestamp_r']
         ind = self._dec_ind
@@ -799,6 +843,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 self._handle_replay(2, msg)
 
     def _handle_replay(self, arm, msg):
+        """Handle a replay event for a non-instructive task"""
 
         # assumes already satisfied event lockout and minimum unique
         # trodes criteria. all these events should therefore be recorded
@@ -845,6 +890,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         )
 
     def _find_replay_instructive(self, msg):
+        """Look for a potential replay event for an instructive task"""
 
         ts = msg[0]['bin_timestamp_r']
         ind = self._dec_ind
@@ -890,6 +936,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 self._handle_replay_instructive(2, msg)
 
     def _handle_replay_instructive(self, arm, msg):
+        """Handle a replay event for an instructive task"""
 
         # assumes already satisfied event lockout and minimum unique
         # trodes criteria. all these events should therefore be recorded
@@ -943,6 +990,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         )
 
     def _choose_next_instructive_target(self):
+        """Choose next target arm for an instructive task"""
 
         if np.all(self._instr_rewarded_arms == 1):
             print('INSTRUCTIVE: switch to arm 2')
@@ -955,10 +1003,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         print(f"INSTRUCTIVE: New target arm: {self.p_replay['target_arm']}")
 
     def _check_send_shortcut(self, other_condition):
+        """Whether or not a shortcut message should be sent"""
 
         return self._task_state == 2 and other_condition
 
     def _init_ripple_misc(self, rtrodes, ripple_types):
+        """Initialize data used for dealing with ripple data"""
 
         self._is_in_multichannel_ripple = {
             rtype: False for rtype in ripple_types
@@ -1008,6 +1058,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         )
 
     def _init_head_dir(self):
+        """Initialize data relevant to head direction data"""
 
         self._head_angle = 0
         self._center_well_loc = self._config['stimulation']['center_well_loc']
@@ -1019,6 +1070,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._well_2_y = well_loc[1][1]
 
     def _init_data_buffers(self):
+        """Initialize data objects"""
 
         # head direction params
         # only an approximation since camera module timestamps do not come in at
@@ -1086,6 +1138,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._in_burst = np.full(num_decoders, False, dtype=bool)
 
     def _seed_mua_stats(self):
+        """Set the initial MUA stats"""
 
         try:
             for rank, ind in self._decoder_rank_ind_map.items():
@@ -1098,6 +1151,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             pass
 
     def _init_stim_params(self):
+        """Initialize parameters governing stimulation"""
 
         # Convention
         # ts - timestamp
@@ -1138,6 +1192,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         )
 
     def _init_params(self):
+        """Initialize parameters used by this object"""
 
         self.p = {}
         self.p['instructive_file'] = self._config[self._config['datasource']]['instructive_file']

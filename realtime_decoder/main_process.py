@@ -16,6 +16,8 @@ from realtime_decoder import (
 ####################################################################################
 
 class GenericMainRecvInterface(base.MPIRecvInterface):
+    """Generic receiving interface object for main_process"""
+
     def __init__(
         self, comm, rank, config,
         msg_dtype, msg_tag, msg_handler
@@ -33,6 +35,8 @@ class GenericMainRecvInterface(base.MPIRecvInterface):
         )
 
     def receive(self):
+        """Test for a message and if available, process it"""
+
         rdy = self._req.Test(status=self._mpi_status)
         if rdy:
             msg = np.frombuffer(self._msg_buffer, dtype=self._msg_dtype)
@@ -43,20 +47,31 @@ class GenericMainRecvInterface(base.MPIRecvInterface):
             )
 
 class MainMPISendInterface(base.MPISendInterface):
+    """Sending interface object for main_process"""
+
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
 
     def send_record_register_messages(self):
+        """Raise an error since this method is not supposed to be called
+        for this particular object"""
+
         raise NotImplementedError(
             "This interface does not send records to the main process to be registered")
 
     def send_trode_selection(self, rank:int, trodes:Sequence[int]):
+        """Send a message notifying another process which electrode
+        groups it should be handling"""
+
         self.comm.send(
             obj=messages.TrodeSelection(trodes),
             dest=rank, tag=messages.MPIMessageTag.COMMAND_MESSAGE
         )
 
     def send_activate_datastream(self, ranks:Sequence[int]):
+        """Send a message telling another process to activate its
+        data receivers"""
+
         for rank in ranks:
             self.comm.send(
                 obj=messages.ActivateDataStreams(),
@@ -64,9 +79,12 @@ class MainMPISendInterface(base.MPISendInterface):
             )
 
     def send_setup_complete(self):
+        """Notify GUI that setup is complete for all processes
+        and the decoder system is ready to start processing neural
+        data"""
 
         self.class_log.debug("Sending SetupComplete message")
-        
+
         # very hacky but sometimes the GUI fails to receive a SetupComplete
         # messages. here we send it multiple times in the hopes that the
         # GUI will pick up at least one of them
@@ -77,7 +95,9 @@ class MainMPISendInterface(base.MPISendInterface):
                 tag=messages.MPIMessageTag.COMMAND_MESSAGE
             )
 
-    def send_termination_signal(self, ranks:Sequence[int], *, exit_code=0) -> None:
+    def send_termination_signal(self, ranks:Sequence[int], *, exit_code=0):
+        """Send a list of ranks a signal to terminate"""
+
         obj = messages.TerminateSignal(exit_code=exit_code)
         for rank in ranks:
             self.comm.send(
@@ -86,18 +106,27 @@ class MainMPISendInterface(base.MPISendInterface):
             )
 
     def send_new_writer_message(self, ranks:Sequence[int], new_writer_message):
+        """Send a list of ranks a message to instantiate a writer
+        object for recording their data"""
+
         for rank in ranks:
             self.comm.send(
                 obj=new_writer_message, dest=rank,
                 tag=messages.MPIMessageTag.COMMAND_MESSAGE)
 
     def send_start_rec_message(self, ranks:Sequence[int]):
+        """Send a list of ranks a message to enable recording
+        their data"""
+
         for rank in ranks:
             self.comm.send(
                 obj=messages.StartRecordMessage(), dest=rank,
                 tag=messages.MPIMessageTag.COMMAND_MESSAGE)
 
     def send_decoder_started(self):
+        """Notify GUI that the decoder system has begun processing
+        neural data"""
+
         self.comm.send(
             obj=messages.DecoderStarted(),
             dest=self.config['rank']['gui'][0],  # need to check config?
@@ -109,6 +138,7 @@ class MainMPISendInterface(base.MPISendInterface):
 ####################################################################################
 
 class MainManager(base.MessageHandler):
+    """A manager class that handles MPI, among other functions"""
 
     def __init__(
         self, rank, num_ranks, config, send_interface, stim_decider, *,
@@ -156,10 +186,13 @@ class MainManager(base.MessageHandler):
         self._started = False
 
     def send_setup_complete(self):
+        """Send message that setup is complete"""
+
         self._send_interface.send_setup_complete()
 
     def handle_message(self, msg, mpi_status):
-        
+        """Process message"""
+
         source_rank = mpi_status.source
 
         if isinstance(msg, messages.StartupSignal):
@@ -188,18 +221,22 @@ class MainManager(base.MessageHandler):
                 f"Unrecognized command message of type {type(msg)}, ignoring")
 
     def handle_gui_message(self, msg, mpi_status):
+        """Raise error because this object is not designed to handle
+        messages sent by the GUI"""
+
         raise NotImplementedError(
             "MainManager does not handle GUI messages"
         )
 
     def startup(self):
+        """Initiate startup sequence"""
 
         if not self._started:
             self.class_log.info("Starting up")
 
             # startup encoder ranks
             self._startup_encoders()
-            
+
             # startup ripple ranks
             self._startup_ripples()
 
@@ -216,12 +253,16 @@ class MainManager(base.MessageHandler):
             )
 
     def trigger_termination(self, *, raise_stop_iteration=True):
+        """Tell all ranks to terminate"""
+
         self._send_interface.send_termination_signal(self._ranks_to_monitor)
 
         if raise_stop_iteration:
             raise StopIteration()
 
     def terminate_remaining_processes(self, ranks):
+        """Terminate ranks that are still alive and then
+        terminate this process as well"""
 
         self._send_interface.send_termination_signal(
             sorted(ranks), exit_code=1
@@ -229,6 +270,9 @@ class MainManager(base.MessageHandler):
         raise StopIteration()
 
     def _startup_ripples(self):
+        """Notify ripple processes what electrode groups they
+        should be handling"""
+
         trodes = self._config["trode_selection"]["ripples"]
 
         # Round robin allocation of channels to ripple ranks
@@ -249,6 +293,8 @@ class MainManager(base.MessageHandler):
             )
 
     def _startup_encoders(self):
+        """Notify encoder processes what electrode groups they
+        should be handling"""
 
         trodes = self._config["trode_selection"]["decoding"]
 
@@ -270,6 +316,9 @@ class MainManager(base.MessageHandler):
             )
 
     def _activate_datastreams(self):
+        """Tell all relevant processes to activate their
+        neural data receivers"""
+
         self._send_interface.send_activate_datastream(
             self._config['rank']['ripples']
         )
@@ -283,6 +332,9 @@ class MainManager(base.MessageHandler):
         )
 
     def _startup_rec_writers(self):
+        """Notify processes to begin recording their data, if recording
+        is enabled"""
+
         rs = [r for r in self._config['rank_settings']['enable_rec'] if r is not self._rank]
 
         self._send_interface.send_new_writer_message(
@@ -298,9 +350,15 @@ class MainManager(base.MessageHandler):
         self._stim_decider.start_record_writing()
 
     def _send_decoder_started(self):
+        """Send a message signifying that the decoder system has started
+        processing neural data"""
+
         self._send_interface.send_decoder_started()
 
     def _update_all_rank_setup_status(self, source_rank):
+        """Update list keeping track of which ranks have registered
+        the type of data they can record to disk"""
+
         self.class_log.debug(f"Record registration complete for rank {source_rank}")
         self._set_up_ranks.append(source_rank)
         if sorted(self._set_up_ranks) == self._ranks_sending_recs:
@@ -309,10 +367,14 @@ class MainManager(base.MessageHandler):
                 f"Received from {self._set_up_ranks}, expected {self._ranks_sending_recs}")
 
     def finalize(self):
+        """Final method called before exiting the main data processing loop"""
+
         self._stim_decider.stop_record_writing()
 
     @property
     def all_ranks_set_up(self):
+        """Query whether all ranks have been set up"""
+
         return self._all_ranks_set_up
 
 
@@ -321,8 +383,7 @@ class MainManager(base.MessageHandler):
 ####################################################################################
 
 class MainProcess(base.RealtimeProcess):
-    """Main process
-    """
+    """Top level object in main_process"""
 
     def __init__(self, comm, rank, config, stim_decider, network_client):
 
@@ -387,6 +448,7 @@ class MainProcess(base.RealtimeProcess):
         self.p['process_monitor']['timeout'] = config['process_monitor']['timeout']
 
     def main_loop(self):
+        """Main data processing loop"""
 
         check_user_input = True
 
@@ -445,12 +507,17 @@ class MainProcess(base.RealtimeProcess):
         self.class_log.info("Exited main loop")
 
     def startup(self):
+        """Initiate startup sequence for processing neural data"""
+
         self._main_manager.startup()
 
     def trigger_termination(self):
+        """Initiate termination of all processes"""
+
         self._main_manager.trigger_termination()
 
     def _check_processes(self):
+        """Check whether the other processes are still alive"""
 
         for rank in self._ranks_to_check:
             self.comm.send(

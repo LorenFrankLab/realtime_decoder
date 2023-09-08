@@ -14,16 +14,22 @@ from typing import Dict
 
 from realtime_decoder import binary_record
 
+"""Contains methods used for combining binary record files into a single
+file
+"""
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("merge_rec")
 
 def init_shared(l, fname):
+    """Initializes global variables"""
     global hdf5_lock
     global hdf5_filename
     hdf5_lock = l
     hdf5_filename = fname
 
 def convert_pandas(reader):
+    """Convert binary data to pandas data"""
 
     logger.debug(f"Reading from file {reader.filepath}")
     panda_dict = reader.convert_to_pandas()
@@ -39,6 +45,8 @@ def convert_pandas(reader):
     return filepath_dict
 
 def merge_pandas(filename_items):
+
+    """Merge pandas dataframes"""
 
     rec_id = filename_items[0]
     filenames = filename_items[1]
@@ -66,6 +74,8 @@ def merge_pandas(filename_items):
     hdf5_lock.release()
 
 def merge_timings(config):
+
+    """Merge timings files together"""
 
     outfile = os.path.join(
         config['files']['output_dir'],
@@ -148,6 +158,8 @@ def merge_timings(config):
 
 def copy_to_backup(config):
 
+    """Copy output files to a backup location"""
+
     try:
 
         backup_dir = config['files']['backup_dir']
@@ -174,6 +186,8 @@ def copy_to_backup(config):
         pass
 
 def merge_with_temp(config, numprocs):
+
+    """Combine binary record files, using temporary files in the process"""
 
     t0 = time.time()
 

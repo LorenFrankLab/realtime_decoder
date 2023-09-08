@@ -7,7 +7,10 @@ import glob
 
 from typing import List
 
+"""Various useful utilities"""
+
 def _extract_configuration(recfile):
+    """Extracts the configuration section of a .rec file"""
     lines = []
     with open(recfile, 'rb') as f:
         fileline = ''
@@ -21,6 +24,9 @@ def _extract_configuration(recfile):
     return root
 
 def get_xml_root(file):
+
+    """Returns the root node of the configuration section
+    (an XML tree) in a .trodesconf or .rec file"""
     p = pathlib.Path(file)
     suffix = p.suffix
 
@@ -35,9 +41,13 @@ def get_xml_root(file):
     return root
 
 def nop():
+    """No-op method, does nothing"""
     pass
 
 def get_ntrode_inds(file, ntrode_ids):
+
+    """Given a list of ntrode_ids (integers), determines
+    which indices those ids map to"""
     # ntrode_ids should be a list of integers
     inds_to_extract = []
 
@@ -50,6 +60,8 @@ def get_ntrode_inds(file, ntrode_ids):
     return inds_to_extract
 
 def get_network_address(file):
+    """Determines the network address of the machine running a Trodes
+    server instance"""
     root = get_xml_root(file)
     network_config = root.find("NetworkConfiguration")
 
@@ -68,6 +80,8 @@ def get_network_address(file):
         return "tcp://" + address + ":" + port
 
 def estimate_new_stats(new_value, mean, M2, count):
+
+    """Online method for estimating point estimates"""
     count += 1
     delta = (new_value - mean)
     mean += delta / count
@@ -82,6 +96,12 @@ def normalize_to_probability(distribution):
     return distribution / np.nansum(distribution)
 
 def apply_no_anim_boundary(x_bins, arm_coor, image, fill=0):
+
+    """Given an array denoting the boundaries of maze arms,
+    and an array denoting valid bins, fills a 1D or 2D array
+    with a specified value corresponding to bins where an
+    animal is never supposed to be"""
+
     # note: mutates data!
     # from util.py script in offline decoder folder
 
@@ -104,6 +124,9 @@ def apply_no_anim_boundary(x_bins, arm_coor, image, fill=0):
 
 def get_last_num(textfile):
 
+    """Gets the last number of a text file. The text file
+    is assumed to consist of one integer per line"""
+
     # assumes each line consists of one integer
 
     with open(textfile, 'rb') as f:
@@ -124,11 +147,16 @@ def get_last_num(textfile):
 
 def write_text_file(textfile, val):
 
+    """Appends an integer value to a file as a new line"""
+
     with open(textfile, 'a') as f:
 
         f.write(str(val) + '\n')
 
 def get_switch_time(taskfile):
+
+    """Given a state script log file, finds out the time when
+    the task switched to task 2"""
 
     with open(taskfile, 'r') as f:
         lines = f.readlines()
@@ -148,6 +176,9 @@ def get_switch_time(taskfile):
     return t[0]
 
 def find_unique_file(pattern, desc):
+
+    """Searches for a file matching a given pattern and ensures
+    it is unique; otherwise this method raise an error"""
 
     files = glob.glob(pattern)
 

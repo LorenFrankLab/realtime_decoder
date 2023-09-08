@@ -2,6 +2,8 @@ import numpy as np
 
 from realtime_decoder import utils
 
+"""Contains methods for generating state-space transition models"""
+
 ##########################################################################
 # Clusterless decoder transitions
 ##########################################################################
@@ -42,6 +44,9 @@ from realtime_decoder import utils
 
 # currently flat transition matrix
 def sungod_transition_matrix(pos_bins, arm_coords, bias):
+
+    """Generate transition matrix describing transitions
+    for a maze consisting of a center segment and 1 or more arms"""
 
     n = len(pos_bins)
     transmat = np.zeros((n, n)) + bias
@@ -85,6 +90,10 @@ def _gaussian(x, mu, sigma):
 
 
 def random_walk(arm_coords, cm_per_bin, sigma):
+    """Generate transition matrix describing transitions
+    for a maze consisting of a center segment and 1 or more arms.
+    A Gaussian kernel is used for smoothing"""
+
     base_offset = arm_coords[0][1]*cm_per_bin
     arm_labels = np.zeros(arm_coords[-1][-1] + 1) * np.nan
     bin_centers = np.arange(arm_labels.shape[0], dtype=np.float) * np.nan
@@ -116,6 +125,11 @@ def random_walk(arm_coords, cm_per_bin, sigma):
 
 
 def uniform(arm_coords, cm_per_bin, sigma):
+
+    """Generate transition matrix describing transitions
+    for a maze consisting of a center segment and 1 or more arms.
+    Transitions are uniform"""
+
     n_states = arm_coords[-1][-1]- arm_coords[0][0] + 1
     is_track_interior = np.zeros(n_states, dtype=bool)
     for ii, (a, b) in enumerate(arm_coords):
@@ -129,6 +143,10 @@ def uniform(arm_coords, cm_per_bin, sigma):
 
 
 def identity(arm_coords, cm_per_bin, sigma):
+    """Generate transition matrix describing transitions
+    for a maze consisting of a center segment and 1 or more arms.
+    There is zero transition probability on the off-diagonal elements"""
+    
     n_states = arm_coords[-1][-1]- arm_coords[0][0] + 1
     is_track_interior = np.zeros(n_states, dtype=bool)
     for ii, (a, b) in enumerate(arm_coords):
@@ -142,6 +160,10 @@ def identity(arm_coords, cm_per_bin, sigma):
 
 
 def strong_diagonal_discrete(n_states, diag):
+    """Generate transition matrix describing transitions
+    for a maze consisting of a center segment and 1 or more arms.
+    Unlike identity(), this method puts some transition probability
+    on the off-diagonals"""
 
     strong_diagonal = np.identity(n_states) * diag
     is_off_diag = ~np.identity(n_states, dtype=bool)

@@ -16,6 +16,8 @@ from realtime_decoder import (
 ####################################################################################
 
 class EncoderJointProbEstimate(object):
+    """Data object containing infomration about joint probability
+    over marks and position"""
 
     def __init__(self, nearby_spikes, weights, positions, hist):
         self.nearby_spikes = nearby_spikes
@@ -28,11 +30,14 @@ class EncoderJointProbEstimate(object):
 ####################################################################################
 
 class EncoderMPISendInterface(base.StandardMPISendInterface):
+    """Sending interface object for encoder_process"""
 
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
 
     def send_joint_prob(self, dest, msg):
+        """Send mark-position joint probability data"""
+
         self.comm.Send(
             buf=msg.tobytes(),
             dest=dest,
@@ -44,8 +49,8 @@ class EncoderMPISendInterface(base.StandardMPISendInterface):
 ####################################################################################
 
 class Encoder(base.LoggingClass):
-    """Note: this class only handles 1D position currently
-    """
+    """Represents an encoding model. Note: this class only handles
+    1D position currently"""
 
     def __init__(self, config, trode, pos_bin_struct):
 
@@ -84,6 +89,8 @@ class Encoder(base.LoggingClass):
         self._init_params()
 
     def _load_model(self):
+        """Load a previously saved model"""
+
         files = glob.glob(
             os.path.join(
                 self._config['files']['saved_model_dir'],
@@ -110,6 +117,8 @@ class Encoder(base.LoggingClass):
             self.class_log.info(f"Loaded encoding model from {files[0]}")
 
     def _init_params(self):
+        """Initialize parameters used for the encoding model"""
+
         self.p = {}
         self.p['mark_dim'] = self._config['encoder']['mark_dim']
         self.p['use_filter'] = self._config['encoder']['mark_kernel']['use_filter']
@@ -119,6 +128,8 @@ class Encoder(base.LoggingClass):
         self.p['num_occupancy_points'] = self._config['display']['encoder']['occupancy']
 
     def add_new_mark(self, mark):
+        """Add a new mark to the encoding model"""
+
         if self._mark_idx == self._marks.shape[0]:
             self._marks = np.vstack((
                 self._marks,
@@ -134,6 +145,8 @@ class Encoder(base.LoggingClass):
         self._mark_idx += 1
 
     def get_joint_prob(self, mark):
+        """Get a estimate of the joint mark-position probability,
+        given an observed mark"""
 
         # on the very first spike, there are no marks with which to evaluate
         # the kernel. therefore, return immediately
@@ -195,6 +208,8 @@ class Encoder(base.LoggingClass):
         )
 
     def update_position(self, position, update_occupancy:bool):
+        """Update the current position of the encoding model"""
+
         self._position = position
 
         if update_occupancy:
@@ -210,6 +225,8 @@ class Encoder(base.LoggingClass):
                 print(f"Number of encoder occupancy points: {self._occupancy_ct}")
 
     def save(self):
+        """Save the encoding model to disk"""
+
         filename = os.path.join(
             self._config['files']['output_dir'],
             f"{self._config['files']['prefix']}_" +
@@ -226,6 +243,8 @@ class Encoder(base.LoggingClass):
         self.class_log.info(f"Saved encoding model to {filename}")
 
 class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
+    """Manager class that handles MPI messsages and delegates training
+    of the encoding model, among other functions"""
 
     def __init__(self, rank, config, send_interface, spikes_interface,
         pos_interface, pos_mapper
@@ -312,6 +331,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._init_params()
 
     def handle_message(self, msg, mpi_status):
+        """Process a (non neural data) received MPI message"""
 
         if isinstance(msg, messages.TrodeSelection):
             self._set_up_trodes(msg.trodes)
@@ -340,6 +360,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def next_iter(self):
+        """Run one iteration processing any available neural data"""
 
         spike_msg = self._spikes_interface.__next__()
         if spike_msg is not None:
@@ -350,6 +371,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._process_pos(pos_msg)
 
     def _init_params(self):
+        """Initialize parameters used by this object"""
 
         self.p = {}
         self.p['num_bins'] = self._config['encoder']['position']['num_bins']
@@ -368,11 +390,16 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['num_pos_points'] = self._config['encoder']['num_pos_points']
 
     def _update_gui_params(self, gui_msg):
+        """Update parameters that can be changed by the GUI"""
+
         self.class_log.info("Updating GUI encoder parameters")
         self.p['vel_thresh'] = gui_msg.encoding_velocity_threshold
         self.p['frozen_model'] = gui_msg.freeze_model
 
     def _init_timings(self, trode):
+        """Initialize objects that are used for keeping track of
+        timing information"""
+
         dt = np.dtype([
             ('elec_grp_id', '=i4'),
             ('timestamp', '=i8'),
@@ -390,6 +417,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._times_ind[trode] = 0
 
     def _process_spike(self, spike_msg):
+        """Process a spike event"""
 
         spike_timestamp = spike_msg.timestamp
         elec_grp_id = spike_msg.elec_grp_id
@@ -486,6 +514,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def _process_pos(self, pos_msg):
+        """Process a new position data point"""
 
         if pos_msg.timestamp <= self._pos_timestamp:
             self.class_log.warning(
@@ -549,15 +578,30 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             self.class_log.debug(f"Received {self._pos_counter} pos points")
 
     def _compute_mark(self, datapoint):
+        """Compute mark vector given an object containing spike waveform
+        data"""
+
+        # Make sure format is (n_channels, n_waveform_points)
         spike_data = np.atleast_2d(datapoint.data)
+
+        # Determine the peak value for each channel
         channel_peaks = np.max(spike_data, axis=1)
+
+        # Find out which of the channels has the highest peak value
         peak_channel_ind = np.argmax(channel_peaks)
+
+        # Determine at which index the peak value was observed, given
+        # the channel computed immediately above
         t_ind = np.argmax(spike_data[peak_channel_ind])
+
+        # Find the spike waveform values for each channel (i.e. a vector)
+        # given the index computed immediately above
         amp_mark = spike_data[:, t_ind]
 
         return amp_mark
 
     def _is_training_epoch(self):
+        """Whether or not the encoding model is in the training phase"""
 
         res = (
             abs(self._current_vel) >= self.p['vel_thresh'] and
@@ -572,6 +616,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         t_start_kde, t_end_kde,
         t_start_enc_send, t_end_enc_send
     ):
+        """Record timing information for a processed spike event"""
 
         ind = self._times_ind[trode]
 
@@ -598,6 +643,8 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._times_ind[trode] += 1
 
     def _save_timings(self):
+        """Save timing data"""
+
         for trode in self._times:
             filename = os.path.join(
                 self._config['files']['output_dir'],
@@ -611,6 +658,8 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
                 f"Wrote timings file for trode {trode} to {filename}")
 
     def _set_up_trodes(self, trodes:List[int]):
+        """Set up data objects given a list of electrode groups
+        this object will be handling/managing"""
 
         for trode in trodes:
             self._spikes_interface.register_datatype_channel(trode)
@@ -643,6 +692,8 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._init_timings(trode)
 
     def finalize(self):
+        """Final method called before exiting the main data processing loop"""
+
         for key in self._spk_counters:
             self.class_log.info(
                 f"Got {self._spk_counters[key]} spikes for electrode "
@@ -659,6 +710,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
 ####################################################################################
 
 class EncoderProcess(base.RealtimeProcess):
+    """Top level object for encoder_process"""
 
     def __init__(
         self, comm, rank, config, spikes_interface, pos_interface, pos_mapper
@@ -684,6 +736,7 @@ class EncoderProcess(base.RealtimeProcess):
         )
 
     def main_loop(self):
+        """Main data processing loop"""
 
         try:
             self._encoder_manager.setup_mpi()
