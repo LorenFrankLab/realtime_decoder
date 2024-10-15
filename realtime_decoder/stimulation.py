@@ -346,6 +346,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 'angle_well_2', np.around(self._angle_well_2, decimals=1)
             )
 
+    # NOTE(DS): I don't do head direction trial
     def _update_head_direction(self, msg):
 
         angle, angle_well_1, angle_well_2 = self._compute_angles(
@@ -717,17 +718,27 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         num_unique = np.count_nonzero(self._enc_ci_buff)
         print(f"Unique trodes: {num_unique}")
+        print(f"task state: {self._task_state}")
 
         send_shortcut = self._check_send_shortcut(
-            self.p_replay['enabled'] and
-            arm == self.p_replay['target_arm']
+            self.p_replay['enabled']
         )
 
         if send_shortcut:
-            self._trodes_client.send_statescript_shortcut_message(14)
-            self._num_rewards[arm] += 1
-            self.send_interface.send_num_rewards(self._num_rewards)
-            print(f"Replay arm {arm} rewarded")
+            if arm == 1:
+                self._trodes_client.send_statescript_shortcut_message(14)
+                self._num_rewards[arm] += 1
+                self.send_interface.send_num_rewards(self._num_rewards)
+                print(f"Replay arm {arm} scm sent")
+            elif arm == 2:
+                self._trodes_client.send_statescript_shortcut_message(6)
+                self._num_rewards[arm] += 1
+                self.send_interface.send_num_rewards(self._num_rewards)
+                print(f"Replay arm {arm} scm sent")
+            else: 
+                print('ERROR: replay arms are not 1 or 2. see stimulation.py') 
+
+
 
         self.write_record(
             binary_record.RecordIDs.STIM_MESSAGE,
@@ -796,6 +807,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             ):
                 self._handle_replay_instructive(2, msg)
 
+    #NOTE(DS): My task is instructive, but handle instructive part in statescript and python observer files
     def _handle_replay_instructive(self, arm, msg):
 
         # assumes already satisfied event lockout and minimum unique
