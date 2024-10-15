@@ -140,6 +140,8 @@ class Encoder(base.LoggingClass):
         if self._mark_idx == 0:
             return None
 
+        #print(mark)
+
         in_range = np.ones(self._mark_idx, dtype=bool)
         if self.p['use_filter']:
             std = self.p['filter_std']
@@ -400,6 +402,12 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         mark_vec = self._compute_mark(spike_msg)
 
+
+        #print('this is mark vec')
+        #print(mark_vec)
+        #print(mark_vec.shape) # NOTE(DS): for debug
+
+        
         if max(mark_vec) > self.p['spk_amp']:
 
             t_start_kde = time.time_ns()
@@ -548,6 +556,39 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         if self._pos_counter % self.p['num_pos_disp'] == 0:
             self.class_log.debug(f"Received {self._pos_counter} pos points")
 
+    def _get_peak_amplitude_relevant_channels(self,
+            features: np.ndarray,
+            distance: int = 2,
+            printbit: bool = False
+    )-> np.ndarray:
+        '''
+        (DS)get the output of _get_peak_amplitude and make the values distance away from the peak zero
+        features: np.ndarray, shape (n_spikes, n_channels) -- output of _get_peak_amplitude
+        distance: int -- number of channels away from the peak to keep ; if 2, then 5 channels will be kept (peak and 2 on each side),
+            default value of 2 was chosen based on quantification of decoding error study by DS.
+        '''
+        if printbit:
+            print("features.shape", features.shape)
+
+        
+        modified_features = np.zeros(features.shape)
+        if len(features.shape) == 1:
+            max_abs_index = np.argmax(np.abs(features))
+            start_index = max(0, max_abs_index - distance)
+            end_index = min(features.shape[0], max_abs_index + (distance+1))
+            modified_features[start_index:end_index] = features[start_index:end_index]
+
+        elif len(features.shape) == 2:
+            for i in range(features.shape[0]):
+                max_abs_index = np.argmax(np.abs(features[i]))
+                start_index = max(0, max_abs_index - distance)
+                end_index = min(features.shape[1], max_abs_index + (distance+1))
+                modified_features[i, start_index:end_index] = features[i, start_index:end_index]
+
+
+        return modified_features
+
+
     def _compute_mark(self, datapoint):
         spike_data = np.atleast_2d(datapoint.data)
         channel_peaks = np.max(spike_data, axis=1)
@@ -555,6 +596,8 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         t_ind = np.argmax(spike_data[peak_channel_ind])
         amp_mark = spike_data[:, t_ind]
 
+        if amp_mark.shape[0] > 5: #if nTrode sortgroup is larger than 5
+            amp_mark = self._get_peak_amplitude_relevant_channels(features = amp_mark,distance = 2)
         return amp_mark
 
     def _is_training_epoch(self):
