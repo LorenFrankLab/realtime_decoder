@@ -614,7 +614,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         ts = msg[0]['bin_timestamp_r']
         ind = self._dec_ind
 
-        num_unique = np.count_nonzero(self._enc_ci_buff)
+        num_unique = np.count_nonzero(np.unique(self._enc_ci_buff))
 
         # don't even bother looking for replay if the basic requirements
         # are not met
@@ -716,7 +716,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         self._replay_event_ts = msg[0]['bin_timestamp_r']
 
-        num_unique = np.count_nonzero(self._enc_ci_buff)
+        num_unique = np.count_nonzero(np.unique(self._enc_ci_buff))
+        print(self._enc_ci_buff)
         print(f"Unique trodes: {num_unique}")
         print(f"task state: {self._task_state}")
 
@@ -773,7 +774,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 "for 2 decoders"
             )
         else:
-            num_unique = np.count_nonzero(self._enc_ci_buff)
+            num_unique = np.count_nonzero(np.unique(self._enc_ci_buff))
 
             # don't even bother looking for replay if the basic requirements are not
             # met
@@ -817,7 +818,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         self._replay_event_ts = msg[0]['bin_timestamp_r']
 
-        num_unique = np.count_nonzero(self._enc_ci_buff)
+        num_unique = np.count_nonzero(np.unique(self._enc_ci_buff))
         print(f"INSTRUCTIVE: Unique trodes: {num_unique}")
 
         outer_arm_visited = utils.get_last_num(self.p['instructive_file'])
