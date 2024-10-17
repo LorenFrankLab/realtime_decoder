@@ -119,7 +119,19 @@ class Encoder(base.LoggingClass):
         self.p['num_occupancy_points'] = self._config['display']['encoder']['occupancy']
 
     def add_new_mark(self, mark):
-        if self._mark_idx == self._marks.shape[0]:
+
+        # this is where the mark_size increases over time 
+        if self._mark_idx <= self._marks.shape[0]:
+            self._marks[self._mark_idx] = mark
+            self._positions[self._mark_idx] = self._position
+            self._mark_idx += 1
+
+        else: #NOTE(DS): I changed this part
+            self.class_log.info(
+                f"mark buffer is full. does not increase the marks"
+            )
+
+            ''' # NOTE(DS): This make buf_size meaningless
             self._marks = np.vstack((
                 self._marks,
                 np.zeros_like(self._marks)
@@ -128,10 +140,9 @@ class Encoder(base.LoggingClass):
                 self._positions,
                 np.zeros_like(self._positions)
             ))
+            '''
 
-        self._marks[self._mark_idx] = mark
-        self._positions[self._mark_idx] = self._position
-        self._mark_idx += 1
+
 
     def get_joint_prob(self, mark):
 
@@ -482,7 +493,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
                 if self._spk_counters[elec_grp_id]['encoding'] % self.p['num_encoding_disp'] == 0:
                     self.class_log.info(
                         f"Added {self._spk_counters[elec_grp_id]['encoding']} "
-                        "spikes to encoding model"
+                        f"spikes to encoding model of nTrode {elec_grp_id}"
                     )
 
         self._spk_counters[elec_grp_id]['total'] += 1
