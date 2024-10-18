@@ -121,7 +121,7 @@ class Encoder(base.LoggingClass):
     def add_new_mark(self, mark):
 
         # this is where the mark_size increases over time 
-        if self._mark_idx <= self._marks.shape[0]:
+        if self._mark_idx < self._marks.shape[0]:
             self._marks[self._mark_idx] = mark
             self._positions[self._mark_idx] = self._position
             self._mark_idx += 1

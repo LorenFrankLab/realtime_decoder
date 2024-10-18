@@ -267,7 +267,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                         )
                     )
                     if send_shortcut_message:
-                        self._trodes_client.send_statescript_shortcut_message(14)
+                        self._trodes_client.send_statescript_shortcut_message(22)
+                        print('ripple scm sent')
+
 
                     self.write_record(
                         binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
@@ -313,7 +315,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 )
 
                 if send_shortcut_message:
-                    self._trodes_client.send_statescript_shortcut_message(14)
+                    self._trodes_client.send_statescript_shortcut_message(22)
+                    print('ripple scm sent')
+
 
                 self.write_record(
                     binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
@@ -435,7 +439,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 )
 
             if send_shortcut_message:
-                self._trodes_client.send_statescript_shortcut_message(14)
+                self._trodes_client.send_statescript_shortcut_message(21)
+                print('head direction scm sent')
 
             if record:
                 self._head_event_ts = ts
@@ -716,8 +721,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         self._replay_event_ts = msg[0]['bin_timestamp_r']
 
+        num_spikes_in_event = np.count_nonzero(self._enc_ci_buff)
         num_unique = np.count_nonzero(np.unique(self._enc_ci_buff))
         print(self._enc_ci_buff)
+        print(f"num spikes : {num_spikes_in_event}")
         print(f"Unique trodes: {num_unique}")
         print(f"task state: {self._task_state}")
 
@@ -830,7 +837,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         )
 
         if send_shortcut:
-            self._trodes_client.send_statescript_shortcut_message(14)
+            self._trodes_client.send_statescript_shortcut_message(21)
             print(f"INSTRUCTIVE: Replay target arm {arm} rewarded")
             utils.write_text_file(self.p['instructive_file'], 0)
             self._instr_rewarded_arms[1:] = self._instr_rewarded_arms[:-1]
