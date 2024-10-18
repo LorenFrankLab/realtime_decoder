@@ -112,6 +112,7 @@ class Encoder(base.LoggingClass):
     def _init_params(self):
         self.p = {}
         self.p['mark_dim'] = self._config['encoder']['mark_dim']
+        self.p['use_channel_dist_from_max_amp'] = self._config['encoder']['use_channel_dist_from_max_amp']
         self.p['use_filter'] = self._config['encoder']['mark_kernel']['use_filter']
         self.p['filter_std'] = self._config['encoder']['mark_kernel']['std']
         self.p['filter_n_std'] = self._config['encoder']['mark_kernel']['n_std']
@@ -379,6 +380,7 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['num_total_disp'] = self._config['display']['encoder']['total_spikes']
         self.p['num_pos_disp'] = self._config['display']['encoder']['position']
         self.p['num_pos_points'] = self._config['encoder']['num_pos_points']
+        self.p['use_channel_dist_from_max_amp'] = self._config['encoder']['use_channel_dist_from_max_amp']
 
     def _update_gui_params(self, gui_msg):
         self.class_log.info("Updating GUI encoder parameters")
@@ -569,7 +571,6 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
 
     def _get_peak_amplitude_relevant_channels(self,
             features: np.ndarray,
-            distance: int = 2,
             printbit: bool = False
     )-> np.ndarray:
         '''
@@ -578,6 +579,8 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         distance: int -- number of channels away from the peak to keep ; if 2, then 5 channels will be kept (peak and 2 on each side),
             default value of 2 was chosen based on quantification of decoding error study by DS.
         '''
+        distance = self.p['use_channel_dist_from_max_amp']
+
         if printbit:
             print("features.shape", features.shape)
 
@@ -607,8 +610,8 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
         t_ind = np.argmax(spike_data[peak_channel_ind])
         amp_mark = spike_data[:, t_ind]
 
-        if amp_mark.shape[0] > 5: #if nTrode sortgroup is larger than 5
-            amp_mark = self._get_peak_amplitude_relevant_channels(features = amp_mark,distance = 2)
+        if amp_mark.shape[0] > 2*self.p['use_channel_dist_from_max_amp'] + 1: #if nTrode sortgroup is larger (2*dist + 1) -- where this is meaningful
+            amp_mark = self._get_peak_amplitude_relevant_channels(features = amp_mark)
         return amp_mark
 
     def _is_training_epoch(self):
