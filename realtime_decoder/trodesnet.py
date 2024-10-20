@@ -42,8 +42,10 @@ class TrodesDataReceiver(DataSourceReceiver):
         try:
             self.temp_data = self.sub_obj.receive(noblock=True)
             
+            
+
             if self.datatype == Datatypes.LFP:
-                
+
                 datapoint = LFPPoint(
                     self.temp_data['localTimestamp'],
                     self.ntrode_ids,
@@ -56,7 +58,13 @@ class TrodesDataReceiver(DataSourceReceiver):
                 return datapoint
 
             elif self.datatype == Datatypes.SPIKES:
-                
+                '''
+                print(f"self.temp_data.keys() : {self.temp_data.keys()}")
+                print(f"self.temp_data['nTrodeId'] : {self.temp_data['nTrodeId']} ")
+                print(f"self.ntrode_ids : {self.ntrode_ids}")
+                print(f"self.temp_data : {self.temp_data`}")
+                '''
+
                 ntid = self.temp_data['nTrodeId']
                 if ntid in self.ntrode_ids:
                     

@@ -242,6 +242,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
     def _process_lfp(self, msg):
 
         msg_data = msg.data
+
         msg_timestamp = msg.timestamp
         t_send_data = msg.t_send_data
         t_recv_data = msg.t_recv_data
@@ -335,6 +336,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             in_cond_ripple = self._in_cond_ripple[trode]
             in_content_ripple = self._in_content_ripple[trode]
 
+        datapoint_zscore = (datapoint - mean)/sigma
 
         if lockout_sample == 0: # ok to detect ripples
             # note that velocity threshold is used only when detecting the
@@ -347,10 +349,10 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                 not in_standard_ripple
 
             ):
-
+                #print(f"mean: {mean}; sigma: {sigma}; datapoint: {datapoint}' datapoint_zscore: {datapoint_zscore}, elec_grp_id: {trode}") #NOTE(DS): for debug
                 # sending message gets first priority
                 self._send_ripple_message(
-                    timestamp, trode, "standard", is_consensus_trace
+                    timestamp, trode, "standard", is_consensus_trace,datapoint_zscore
                 )
                 self.write_record(
                     binary_record.RecordIDs.RIPPLE_DETECTED,
@@ -373,7 +375,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
                 # sending message gets first priority
                 self._send_ripple_message(
-                    timestamp, trode, "cond", is_consensus_trace
+                    timestamp, trode, "cond", is_consensus_trace,datapoint_zscore
                 )
                 self.write_record(
                     binary_record.RecordIDs.RIPPLE_DETECTED,
@@ -389,7 +391,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
                 # sending message gets first priority
                 self._send_ripple_message(
-                    timestamp, trode, "content", is_consensus_trace
+                    timestamp, trode, "content", is_consensus_trace,datapoint_zscore
                 )
                 self.write_record(
                     binary_record.RecordIDs.RIPPLE_DETECTED,
@@ -411,7 +413,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
                 # sending message gets first priority
                 self._send_ripple_message(
-                    timestamp, trode, "end", is_consensus_trace
+                    timestamp, trode, "end", is_consensus_trace, datapoint_zscore
                 )
                 for test_condition, rtype in tup:
                     if test_condition:
@@ -432,7 +434,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
                 # sending message gets first priority
                 self._send_ripple_message(
-                    timestamp, trode, "end", is_consensus_trace
+                    timestamp, trode, "end", is_consensus_trace ,datapoint_zscore
                 )
                 for test_condition, rtype in tup:
                     if test_condition:
@@ -453,12 +455,13 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
     def _send_ripple_message(
         self, timestamp, elec_grp_id, ripple_type,
-        is_consensus
+        is_consensus,datapoint_zscore = np.nan
     ):
         self._ripple_msg[0]['timestamp'] = timestamp
         self._ripple_msg[0]['elec_grp_id'] = elec_grp_id
         self._ripple_msg[0]['ripple_type'] = ripple_type
         self._ripple_msg[0]['is_consensus'] = is_consensus
+        self._ripple_msg[0]['datapoint_zscore'] = datapoint_zscore #NOTE(DS): DS added. This is z-score ripple value
 
         self.send_interface.send_ripple(
             self._config['rank']['supervisor'][0],

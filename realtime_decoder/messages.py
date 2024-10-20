@@ -203,7 +203,8 @@ def get_dtype(msg_type:str, *, config:Dict={}):
             ('timestamp', '=i8'),
             ('elec_grp_id', '=i4'),
             ('ripple_type', '=U10'),
-            ('is_consensus', '=?')
+            ('is_consensus', '=?'),
+            ('datapoint_zscore', '=f8')
         ])
     elif msg_type == "SpikePosJointProb":
         num_bins = config['encoder']['position']['num_bins']

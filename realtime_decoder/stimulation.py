@@ -201,8 +201,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p_head['enabled'] = gui_msg.head_direction_stim_enabled
 
     def _update_ripples(self, msg):
-        print(f"ripple msg: {msg}")
-
         if msg[0]['is_consensus']:
             self._update_cons_ripple_status(msg)
         else:
@@ -213,8 +211,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         ts = msg[0]['timestamp']
         trode = msg[0]['elec_grp_id']
         rtype = msg[0]['ripple_type']
+        datapoint_zscore = msg[0]['datapoint_zscore']
 
-        print(f"msg[0]: {msg[0]}") # NOTE(DS): (timestamp, elec_grp_id, ripple_type, is_consensus)
+        #print(f"msg[0]: {msg[0]}") # NOTE(DS): (timestamp, elec_grp_id, ripple_type, is_consensus,datapoint_zscore)
 
 
         if rtype == 'end':
@@ -274,7 +273,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
                     if send_shortcut_message:
                         #self._trodes_client.send_statescript_shortcut_message(22) #NOTE(DS): This has been commented out
-                        print('ripple scm sent')
+                        print(f"ripple scm sent. rtype: {rtype}, elec_grp: {self._ripple_trodes[rtype]}, zscore: {datapoint_zscore}")
 
                     self.write_record(
                         binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
@@ -321,7 +320,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
                 if send_shortcut_message:
                     self._trodes_client.send_statescript_shortcut_message(22)
-                    print('ripple scm sent')
+                    print(f"cons ripple scm sent. rtype: {rtype}, elec_grp: {self._ripple_trodes[rtype]}, zscore: {datapoint_zscore}")
 
 
                 self.write_record(
@@ -739,7 +738,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         trodes_of_spike = self._enc_ci_buff[self._enc_ci_buff != 0]
 
-        print(self._enc_ci_buff)
+        #print(self._enc_ci_buff)
         print(f"num spikes : {num_spikes_in_event}, {trodes_of_spike}")
         print(f"Unique trodes: {num_unique}, {np.unique(trodes_of_spike)}")
         print(f"task state: {self._task_state}")
@@ -761,7 +760,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 print(f"Replay arm {arm} scm sent")
             else: 
                 print('ERROR: Replay arms are not 1 or 2. see stimulation.py') 
-            print(f"num_rewards = {self._num_rewards}")
+            print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: arm1: {self._num_rewards[1]+ arm1: {self._num_rewards[2]}}")
 
 
         self.write_record(
