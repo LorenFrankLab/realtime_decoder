@@ -201,6 +201,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p_head['enabled'] = gui_msg.head_direction_stim_enabled
 
     def _update_ripples(self, msg):
+        print(f"ripple msg: {msg}")
 
         if msg[0]['is_consensus']:
             self._update_cons_ripple_status(msg)
@@ -212,6 +213,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         ts = msg[0]['timestamp']
         trode = msg[0]['elec_grp_id']
         rtype = msg[0]['ripple_type']
+
+        print(f"msg[0]: {msg[0]}") # NOTE(DS): (timestamp, elec_grp_id, ripple_type, is_consensus)
+
 
         if rtype == 'end':
 
@@ -241,6 +245,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                         )
 
         else: # must be a ripple onset message
+            
 
             # ok to add ripple trodes
             if (
@@ -266,10 +271,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                             self.p_ripples['method'] == 'multichannel'
                         )
                     )
-                    if send_shortcut_message:
-                        self._trodes_client.send_statescript_shortcut_message(22)
-                        print('ripple scm sent')
 
+                    if send_shortcut_message:
+                        #self._trodes_client.send_statescript_shortcut_message(22) #NOTE(DS): This has been commented out
+                        print('ripple scm sent')
 
                     self.write_record(
                         binary_record.RecordIDs.STIM_RIPPLE_DETECTED,
@@ -589,7 +594,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         # add new posterior/likelihood probability sums for desired regions
         # perhaps we want to compute probability sum for box eventually?
-        self._region_ps_buff[ind, self._dd_ind, 0] = np.nan
+        self._region_ps_buff[ind, self._dd_ind, 0] = arm_probs[0] # average of the whole center
         self._region_ps_buff[ind, self._dd_ind, 1] = ps_arm1
         self._region_ps_buff[ind, self._dd_ind, 2] = ps_arm2
 
@@ -603,6 +608,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         for ii, (a, b) in enumerate(self.p['arm_coords']):
             arm_probs[ii] = prob[a:b+1].sum()
 
+
         return arm_probs
 
     def _compute_region_probs(self, prob):
@@ -611,7 +617,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         ps_arm2 = prob[36:41].sum()
         ps_arm1_base = prob[13:18].sum()
         ps_arm2_base = prob[29:34].sum()
-
+            
         return ps_arm1, ps_arm2, ps_arm1_base, ps_arm2_base
 
     def _find_replay(self, msg):
@@ -636,8 +642,13 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             secondary_arm_thresh = self.p_replay['secondary_arm_threshold']
             other_arm_thresh = self.p_replay['other_arm_threshold']
 
-            avg_arm_ps_1 = np.mean(self._arm_ps_buff[0], axis=0)
-            avg_arm_ps_2 = np.mean(self._arm_ps_buff[1], axis=0)
+
+
+            #NOTE(DS): changed the code so that the target arm is at the tip of the arms
+            avg_arm_ps_1 = np.mean(self._region_ps_buff[0],axis = 0) #NOTE(DS): target arm + whole center
+            avg_arm_ps_2 = np.mean(self._region_ps_buff[1],axis = 0) #NOTE(DS): target arm + whole center
+            #avg_arm_ps_1 = np.mean(self._arm_ps_buff[0], axis=0)
+            #avg_arm_ps_2 = np.mean(self._arm_ps_buff[1], axis=0)
 
             # if at least one of the decoders crosses the primary
             # threshold, then we determine which of them has the
@@ -696,7 +707,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             arm_thresh = self.p_replay['primary_arm_threshold']
             other_arm_thresh = self.p_replay['other_arm_threshold']
 
-            avg_arm_ps = np.mean(self._arm_ps_buff[ind], axis=0)
+            #NOTE(DS): changed the code so that the target arm is at the tip of the arms
+            avg_arm_ps = np.mean(self._region_ps_buff[ind],axis = 0) #NOTE(DS): target arm + whole center
+            #avg_arm_ps = np.mean(self._arm_ps_buff[ind], axis=0) # NOTE(DS): the whole arm
 
             # arm 1 candidate event
             if (
@@ -723,9 +736,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         num_spikes_in_event = np.count_nonzero(self._enc_ci_buff)
         num_unique = np.count_nonzero(np.unique(self._enc_ci_buff))
+
+        trodes_of_spike = self._enc_ci_buff[self._enc_ci_buff != 0]
+
         print(self._enc_ci_buff)
-        print(f"num spikes : {num_spikes_in_event}")
-        print(f"Unique trodes: {num_unique}")
+        print(f"num spikes : {num_spikes_in_event}, {trodes_of_spike}")
+        print(f"Unique trodes: {num_unique}, {np.unique(trodes_of_spike)}")
         print(f"task state: {self._task_state}")
 
         send_shortcut = self._check_send_shortcut(
@@ -744,8 +760,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 self.send_interface.send_num_rewards(self._num_rewards)
                 print(f"Replay arm {arm} scm sent")
             else: 
-                print('ERROR: replay arms are not 1 or 2. see stimulation.py') 
-
+                print('ERROR: Replay arms are not 1 or 2. see stimulation.py') 
+            print(f"num_rewards = {self._num_rewards}")
 
 
         self.write_record(

@@ -521,7 +521,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         # head of the buffer (the index at which the next spike will be
         # stored)
         if self._sb_ind == 0:
-            x = self._spike_buf.shape[0] - np.sum(self._spike_buf[:, 4])
+            x = self._spike_buf.shape[0] - np.sum(self._spike_buf[:, 4]) # used
             self._dropped_spikes += int(x)
             pct = self._dropped_spikes/self._spike_msg_ct*100
             self.class_log.info(
