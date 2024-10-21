@@ -665,7 +665,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     avg_arm_ps_1[1] > arm_thresh and
                     avg_arm_ps_2[1] > arm_thresh and
                     np.all(avg_arm_ps_1[[0, 2]] < other_arm_thresh) and 
-                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh) and 
+                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh) 
                 ):
                     self._handle_replay(1, msg)
 
@@ -673,7 +673,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                     avg_arm_ps_1[2] > arm_thresh and
                     avg_arm_ps_2[2] > arm_thresh and
                     np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and 
-                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh) and 
+                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh) 
                 ):
                     self._handle_replay(1, msg)
             

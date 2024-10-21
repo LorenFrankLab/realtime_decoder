@@ -1416,6 +1416,7 @@ class DecodingResultsWindow(QMainWindow):
                     self._plot_items['post']['image'][ii]
                 )
 
+    # TODO(DS): Change this to a consensus ripple power 
     def _setup_state_prob_plots(self, num_plots, labels, colors):
         for ii in range(num_plots):
 
@@ -1456,6 +1457,7 @@ class DecodingResultsWindow(QMainWindow):
             self._elapsed_timer.start()
             self._update_display_data()
 
+    #NOTE(DS): This updates the display data
     def _update_display_data(self):
 
         # set plot data
@@ -1523,6 +1525,7 @@ class DecodingResultsWindow(QMainWindow):
         sender = mpi_status.source
         plot_ind = self._decoder_rank_ind_map[mpi_status.source]
         assert sender == msg[0]['rank']
+        
         ind = self._data['ind'][plot_ind]
 
         # update data

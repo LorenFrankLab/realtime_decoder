@@ -1,15 +1,15 @@
 ---
 rank:
   supervisor: [0]
-  ripples: [3]
-  decoders: [1]
+  ripples: [4]
+  decoders: [1,2]
   encoders: [
-    4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19
+    5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20
   ]
-  gui: [2]
+  gui: [3]
 rank_settings:
   enable_rec: [
-    0,1,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19
+    0,1,2,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20
   ]
 trode_selection:
   ripples: [44,72]
@@ -19,10 +19,15 @@ trode_selection:
 
 decoder_assignment:
   # key is the decoder rank. the list consists of
-  # the decoding trodes
-  1: [
-    5,13,21,33,37,41,45,49,53,57,61,73,77,81,85,123
-  ],
+  # the decoding trodes; 
+  #1: CA1 + RSC
+  #2: PFC
+  1: [ 
+    5,13,21,73,77,81,85,123
+  ]
+  2: [
+    33,37,41,45,49,53,57,61
+  ]
 
   
 algorithm: "clusterless_decoder"
