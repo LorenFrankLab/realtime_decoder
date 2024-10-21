@@ -155,6 +155,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         else:
             self._max_repeats = -1 # currently no restriction
 
+        #NOTE(DS): How to send message
+        self._decoder_to_message = self._config['decoder']['decoder_to_message']
+
         self._init_stim_params()
         self._init_data_buffers()
         self._init_params()
@@ -637,8 +640,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         if self._num_decoders == 2:
 
-            primary_arm_thresh = self.p_replay['primary_arm_threshold']
-            secondary_arm_thresh = self.p_replay['secondary_arm_threshold']
+            #primary_arm_thresh = self.p_replay['primary_arm_threshold']
+            #secondary_arm_thresh = self.p_replay['secondary_arm_threshold']
+            arm_thresh = self.p_replay['primary_arm_threshold']
             other_arm_thresh = self.p_replay['other_arm_threshold']
 
 
@@ -655,51 +659,45 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             # the lower average arm probability sum has to cross
             # the secondary threshold
 
-            # arm 1 candidate event
-            if (
-                avg_arm_ps_1[1] > primary_arm_thresh or
-                avg_arm_ps_2[1] > primary_arm_thresh
-            ):
-
-                if (
-                    avg_arm_ps_1[1] > avg_arm_ps_2[1] and
-                    avg_arm_ps_2[1] > secondary_arm_thresh and
-                    np.all(avg_arm_ps_1[[0, 2]] < other_arm_thresh) and
-                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh)
+            #NOTE(DS): Everything in this block, I implemented. Now the criteria is simpler.
+            if self._decoder_to_message == 0: # 0: meaning both has to agree
+                if (        
+                    avg_arm_ps_1[1] > arm_thresh and
+                    avg_arm_ps_2[1] > arm_thresh and
+                    np.all(avg_arm_ps_1[[0, 2]] < other_arm_thresh) and 
+                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh) and 
                 ):
-
                     self._handle_replay(1, msg)
 
+                elif (        
+                    avg_arm_ps_1[2] > arm_thresh and
+                    avg_arm_ps_2[2] > arm_thresh and
+                    np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and 
+                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh) and 
+                ):
+                    self._handle_replay(1, msg)
+            
+            else: # if decoder_to_message specifies one decoder
+                if self._decoder_to_message == 1:
+                    avg_arm_ps = avg_arm_ps_1
+                elif self._decoder_to_message == 2:
+                    avg_arm_ps = avg_arm_ps_2
+                
+                    # arm 1 candidate event
+                if (
+                    avg_arm_ps[1] > arm_thresh and
+                    np.all(avg_arm_ps[[0, 2]] < other_arm_thresh)
+                ):
+                    self._handle_replay(1, msg)
+
+                # arm 2 candidate event
                 elif (
-                    avg_arm_ps_2[1] > avg_arm_ps_1[1] and
-                    avg_arm_ps_1[1] > secondary_arm_thresh and
-                    np.all(avg_arm_ps_1[[0, 2]] < other_arm_thresh) and
-                    np.all(avg_arm_ps_2[[0, 2]] < other_arm_thresh)
-                ):
-
-                    self._handle_replay(1, msg)
-
-            # arm 2 candidate event
-            elif (
-                avg_arm_ps_1[2] > primary_arm_thresh or
-                avg_arm_ps_2[2] > primary_arm_thresh
-            ):
-
-                if (
-                    avg_arm_ps_1[2] > avg_arm_ps_2[2] and
-                    avg_arm_ps_2[2] > secondary_arm_thresh and
-                    np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and
-                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh)
+                    avg_arm_ps[2] > arm_thresh and
+                    np.all(avg_arm_ps[[0, 1]] < other_arm_thresh)
                 ):
                     self._handle_replay(2, msg)
 
-                elif (
-                    avg_arm_ps_2[2] > avg_arm_ps_1[2] and
-                    avg_arm_ps_1[2] > secondary_arm_thresh and
-                    np.all(avg_arm_ps_1[[0, 1]] < other_arm_thresh) and
-                    np.all(avg_arm_ps_2[[0, 1]] < other_arm_thresh)
-                ):
-                    self._handle_replay(2, msg)
+
 
         else:
 
@@ -738,7 +736,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         trodes_of_spike = self._enc_ci_buff[self._enc_ci_buff != 0]
 
-        #print(self._enc_ci_buff)
+        print(self._enc_ci_buff)
         print(f"num spikes : {num_spikes_in_event}, {trodes_of_spike}")
         print(f"Unique trodes: {num_unique}, {np.unique(trodes_of_spike)}")
         print(f"task state: {self._task_state}")
@@ -760,7 +758,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 print(f"Replay arm {arm} scm sent")
             else: 
                 print('ERROR: Replay arms are not 1 or 2. see stimulation.py') 
-            print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: arm1: {self._num_rewards[1]+ arm1: {self._num_rewards[2]}}")
+            print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}")
 
 
         self.write_record(
