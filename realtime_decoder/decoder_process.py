@@ -5,7 +5,7 @@ import numpy as np
 
 from realtime_decoder import (
     base, utils, position, messages, transitions,
-    binary_record
+    binary_record, taskstate
 )
 
 ####################################################################################
@@ -13,11 +13,14 @@ from realtime_decoder import (
 ####################################################################################
 
 class DecoderMPISendInterface(base.StandardMPISendInterface):
+    """Sending interface object for decoder_process"""
 
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
 
     def send_posterior(self, dest, msg):
+        """Send a message containing posterior data"""
+
         self.comm.Send(
             buf=msg.tobytes(),
             dest=dest,
@@ -25,6 +28,9 @@ class DecoderMPISendInterface(base.StandardMPISendInterface):
         )
 
     def send_velocity_position(self, dest, msg):
+        """Send a message containing position and
+        velocity data"""
+
         self.comm.Send(
             msg.tobytes(),
             dest=dest,
@@ -32,6 +38,9 @@ class DecoderMPISendInterface(base.StandardMPISendInterface):
         )
 
     def send_dropped_spikes(self, dest, msg):
+        """Send a message containing data about dropped
+        spikes"""
+
         self.comm.Send(
             msg.tobytes(),
             dest=dest,
@@ -39,6 +48,7 @@ class DecoderMPISendInterface(base.StandardMPISendInterface):
         )
 
 class SpikeRecvInterface(base.MPIRecvInterface):
+    """Object for receiving spike data computed from an EncoderProcess"""
 
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
@@ -52,6 +62,8 @@ class SpikeRecvInterface(base.MPIRecvInterface):
         )
 
     def receive(self):
+        """Test whether a message is ready, and if so, return it"""
+
         rdy = self._req.Test()
         if rdy:
             # perform a copy because while we are receiving the next message,
@@ -70,6 +82,7 @@ class SpikeRecvInterface(base.MPIRecvInterface):
         return None
 
 class LFPTimeInterface(base.MPIRecvInterface):
+    """Object for receiving LFP timestamps"""
 
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
@@ -79,6 +92,7 @@ class LFPTimeInterface(base.MPIRecvInterface):
         )
 
     def receive(self):
+        """Test whether a message is ready, and if so, return it"""
 
         rdy, msg = self._req.test()
         if rdy:
@@ -96,6 +110,7 @@ class LFPTimeInterface(base.MPIRecvInterface):
 ####################################################################################
 
 class ClusterlessDecoder(base.Decoder):
+    """Object that does the actual clusterless decoding computation"""
 
     def __init__(self, rank, config, pos_bin_struct):
         super().__init__()
@@ -106,9 +121,15 @@ class ClusterlessDecoder(base.Decoder):
         self._position = 0
 
         num_bins = self._config['encoder']['position']['num_bins']
-        self._posterior = utils.normalize_to_probability(np.ones(num_bins))
+        algorithm = self._config['algorithm']
+        num_states = len(self._config[algorithm]['state_labels'])
+        self._posterior = utils.normalize_to_probability(
+            np.ones((num_states, num_bins))
+        )
         self._prev_posterior = self._posterior.copy()
-        self._likelihood = self._posterior.copy()
+        self._likelihood = utils.normalize_to_probability(
+            np.ones(num_bins)
+        )
 
         # be aware that this starts from zero. in order to be correct,
         # we must have self._config['encoder']['position']['lower'] be 0
@@ -161,25 +182,53 @@ class ClusterlessDecoder(base.Decoder):
             self.class_log.info(f"Loaded occupancy from {files[0]}")
 
     def _init_transitions(self):
-        if self._config['algorithm'] == 'clusterless_decoder':
+        """Initialize transition models"""
+
+        algorithm = self._config['algorithm']
+
+        if algorithm == 'clusterless_decoder':
             self._transmat = transitions.sungod_transition_matrix(
                 self._pos_bins, self._arm_coords,
                 self._config['clusterless_decoder']['transmat_bias']
             )
-        elif config['algorithm'] == 'clusterless_classifier':
-            pass
+        elif algorithm == 'clusterless_classifier':
+
+            num_bins = self._config['encoder']['position']['num_bins']
+            num_states = len(self._config[algorithm]['state_labels'])
+
+            dtt = self._config[algorithm]['discrete_transition']['type'][0]
+            diag = self._config[algorithm]['discrete_transition']['diagonal']
+            self._discrete_state_transition = transitions.DISCRETE_TRANSITIONS[dtt](
+                num_states, diag
+            )
+
+            ctt = self._config[algorithm]['continuous_transition']['type']
+            cm_per_bin = self._config[algorithm]['continuous_transition']['cm_per_bin']
+            sigma = self._config[algorithm]['continuous_transition']['gaussian_std']
+
+            self._continuous_state_transition = np.zeros(
+                (num_states, num_states, num_bins, num_bins))
+            for row_ind, row in enumerate(ctt):
+                for col_ind, transition_type in enumerate(row):
+                    self._continuous_state_transition[row_ind, col_ind] = (
+                        transitions.CONTINUOUS_TRANSITIONS[transition_type](
+                            self._arm_coords, cm_per_bin, sigma
+                        )
+                    )
         else:
             raise NotImplementedError(
                 f"Cannot set up model for algorithm {config['algorithm']}"
             )
 
     def _init_params(self):
+        """Initialize params that can be changed in the GUI"""
 
         self.p = {}
         self.p['algorithm'] = self._config['algorithm']
         self.p['num_occupancy_disp'] = self._config['display']['decoder']['occupancy']
 
     def compute_posterior(self, spike_arr):
+        """Compute the posterior and likelihood for one time bin"""
 
         # update firing rates
         if spike_arr.shape[0] > 0:
@@ -220,20 +269,40 @@ class ClusterlessDecoder(base.Decoder):
                 self._likelihood[None, :] *
                 (self._prev_posterior @ self._transmat)
             )
+            self._posterior = utils.normalize_to_probability(
+                self._posterior
+            )
         elif self.p['algorithm'] == 'clusterless_classifier':
-            pass
+            num_states = self._posterior.shape[0]
+            num_bins = self._likelihood.shape[0]
+            prior = np.zeros((num_states, num_bins))
 
-        self._posterior /= self._posterior.sum()
+            for state_k in np.arange(num_states):
+                for state_k_1 in np.arange(num_states):
+                    prior[state_k] += (
+                        self._discrete_state_transition[state_k_1, state_k] *
+                        self._prev_posterior[state_k_1] @
+                        self._continuous_state_transition[state_k_1, state_k]
+                    )
+
+            self._posterior = utils.normalize_to_probability(
+                prior * self._likelihood
+            )
 
         return self._posterior, self._likelihood
 
     def add_observation(self):
+        """Raise an error because this method should not be
+        called for this object"""
+
         raise ValueError(
             "add_observation() should not be called for this "
             "type of decoder"
         )
 
     def update_position(self, position, update_occupancy:bool):
+        """Update the current position"""
+
         self._position = position
 
         if update_occupancy:
@@ -251,6 +320,8 @@ class ClusterlessDecoder(base.Decoder):
         return self._occupancy
 
     def save_occupancy(self):
+        """Save occupancy data"""
+
         filename = os.path.join(
             self._config['files']['output_dir'],
             f"{self._config['files']['prefix']}_" +
@@ -264,24 +335,26 @@ class ClusterlessDecoder(base.Decoder):
         self.class_log.info(f"Saved occupancy to {filename}")
 
 class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
+    """Manager class that handles MPI messsages and delegates computation
+    of the clusterless posterior, among other functions"""
 
     def __init__(
         self, rank, config, send_interface, spike_interface,
         pos_interface, lfp_interface, pos_mapper
     ):
 
-        if config['algorithm'] == 'clusterless_decoder':
-            state_labels = config['clusterless_decoder']['state_labels']
-        elif config['algorithm'] == 'clusterless_classifier':
-            state_labels = config['clusterless_classifier']['state_labels']
+        algorithm = config['algorithm']
+        if not algorithm in ('clusterless_decoder', 'clusterless_classifier'):
+            raise ValueError(f"Unknown algorithm '{algorithm}'")
+        state_labels = config[algorithm]['state_labels']
 
-        n_bins = config['encoder']['position']['num_bins']
-        dig = len(str(n_bins))
+        num_bins = config['encoder']['position']['num_bins']
+        dig = len(str(num_bins))
         n_arms = len(config['encoder']['position']['arm_coords'])
 
-        pos_labels = [f'x{v:0{dig}d}_{l}' for l in state_labels for v in range(n_bins)]
+        pos_labels = [f'x{v:0{dig}d}_{l}' for l in state_labels for v in range(num_bins)]
         arm_labels = [f'arm{a}' for a in range(n_arms)]
-        likelihood_labels = [f'x{v:0{dig}d}' for v in range(n_bins)]
+        likelihood_labels = [f'x{v:0{dig}d}' for v in range(num_bins)]
         occupancy_labels = likelihood_labels
 
         # note: remove wall time! also changed position of arm labels!
@@ -356,19 +429,22 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         # timestamp, elec_grp_id, pos, cred_int, used, histogram
         self._spike_buf = np.zeros(
-            (self._config['decoder']['bufsize'], n_bins+5)
+            (self._config['decoder']['bufsize'], num_bins+5)
         )
         self._sb_ind = 0
         self._dropped_spikes = 0
         self._duplicate_spikes = 0
 
         self._task_state = 1
+        self._task_state_handler = taskstate.TaskStateHandler(
+            self._config
+        )
         self._save_early = True
 
         self._spike_msg_ct = 0
 
         self._pos_ct = 0
-        self._pos_timestamp = 0
+        self._pos_timestamp = -1
         self._current_pos = 0 # mapped position
         self._current_vel = 0
         self._raw_x = 0
@@ -386,6 +462,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._set_up_trodes()
 
     def next_iter(self):
+        """Run one iteration processing any available neural data"""
 
         spike_msg = self._spike_interface.receive()
         if spike_msg is not None:
@@ -403,6 +480,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
 
     def handle_message(self, msg, mpi_status):
+        """Process a (non neural data) received MPI message"""
 
         if isinstance(msg, messages.BinaryRecordCreate):
             self.set_record_writer_from_message(msg)
@@ -428,11 +506,15 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def _update_gui_params(self, gui_msg):
+        """Update parameters that be changed by the GUI"""
+
         self.class_log.info("Updating GUI decoder parameters")
         self.p['vel_thresh'] = gui_msg.encoding_velocity_threshold
         self.p['frozen_model'] = gui_msg.freeze_model
 
     def _init_decoder(self):
+        """Set up object that will compute the clusterless decoding"""
+
         config = self._config
         rank = self.rank
 
@@ -447,14 +529,19 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             )
 
     def _set_up_trodes(self):
+        """Set up arrays used for tracking timing data for the
+        electrode groups this object is handling"""
+
         trodes = self._config['decoder_assignment'][self.rank]
         for trode in trodes:
             self._init_timings(trode=trode)
 
     def _init_timings(self, *, trode=None):
+        """Set up arrays used for tracking timing data"""
 
         if trode is None:
             dt = np.dtype([
+                ('decoder_rank', '=i4'),
                 ('bin_timestamp_l', '=i8'),
                 ('bin_timestamp_r', '=i8'),
                 ('t_start_post', '=i8'),
@@ -467,6 +554,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._times_ind['posterior'] = 0
         else:
             dt = np.dtype([
+                ('elec_grp_id', '=i4'),
                 ('timestamp', '=i8'),
                 ('t_decoder', '=i8'),
             ])
@@ -477,9 +565,9 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self._times_ind[trode] = 0
 
     def _init_params(self):
+        """Initialize parameters used by this object"""
 
         self.p = {}
-        self.p['taskstate_file'] = self._config.get('trodes').get('taskstate_file')
         self.p['algorithm'] = self._config['algorithm']
         self.p['preloaded_model'] = self._config['preloaded_model']
         self.p['frozen_model'] = self._config['frozen_model']
@@ -501,6 +589,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
 
     def _process_spike(self, spike_msg):
+        """Process a spike message"""
 
         self._record_timings(
             spike_msg[0]['elec_grp_id'],
@@ -541,6 +630,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             self.class_log.info(f"Received {self._spike_msg_ct} spikes so far")
 
     def _process_pos(self, pos_msg):
+        """Process a position message"""
 
         if pos_msg.timestamp <= self._pos_timestamp:
             self.class_log.warning(
@@ -551,12 +641,11 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         self._pos_timestamp = pos_msg.timestamp
 
-        if (
-            self._pos_ct % self.p['num_pos_points'] == 0 and
-            self.p["taskstate_file"] is not None
-        ):
+        if self._pos_ct % self.p['num_pos_points'] == 0:
 
-            self._task_state = utils.get_last_num(self.p['taskstate_file'])
+            self._task_state = self._task_state_handler.get_task_state(
+                self._pos_timestamp
+            )
 
         # calculate velocity using the midpoints
         xmid = (pos_msg.x + pos_msg.x2)/2
@@ -625,6 +714,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._pos_ct += 1
 
     def _record_timings(self, trode, timestamp, t_decoder):
+        """Record timing information"""
 
         ind = self._times_ind[trode]
 
@@ -640,6 +730,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         # write to timings array
         tarr = self._times[trode]
+        tarr[ind]['elec_grp_id'] = trode
         tarr[ind]['timestamp'] = timestamp
         tarr[ind]['t_decoder'] = t_decoder
         self._times_ind[trode] += 1
@@ -648,6 +739,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self, bin_timestamp_l, bin_timestamp_r,
         t_start_post, t_end_post,
     ):
+        """Record timing information about the posterior"""
 
         ind = self._times_ind['posterior']
 
@@ -663,6 +755,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
         # write to timings array
         tarr = self._times['posterior']
+        tarr[ind]['decoder_rank'] = self.rank
         tarr[ind]['bin_timestamp_l'] = bin_timestamp_l
         tarr[ind]['bin_timestamp_r'] = bin_timestamp_r
         tarr[ind]['t_start_post'] = t_start_post
@@ -670,6 +763,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         self._times_ind['posterior'] += 1
 
     def _save_timings(self):
+        """Save timing information"""
 
         filename = os.path.join(
             self._config['files']['output_dir'],
@@ -700,6 +794,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 
 
     def _is_training_epoch(self):
+        """Determine whether or not we are currently in the model
+        training phase"""
 
         res = (
             abs(self._current_vel) >= self.p['vel_thresh'] and
@@ -709,6 +805,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         return res
 
     def _process_lfp_timestamp(self, timestamp):
+        """Process a new LFP timestamp by triggering an updated
+        estimate of the posterior"""
 
         # these are default values. if there are relevant spikes
         # in the time bin of interest, these will be populated
@@ -828,6 +926,9 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         )
 
     def _get_unique(self, spike_times):
+        """Given an array of spike times, find out which ones are
+        unique"""
+
         # remove duplicates and return view of array
         _, inds, counts = np.unique(
             spike_times, return_index=True, return_counts=True
@@ -838,7 +939,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         return unique_inds
 
     def _compute_credible_interval(self, posterior, likelihood):
-        # compute credible interval
+        """Compute credible interval for both the likelihood
+        and posterior"""
 
         post = posterior.sum(axis=0)
         cs_post = np.cumsum(np.sort(post)[::-1])
@@ -850,6 +952,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         return cred_int_post, cred_int_lk
 
     def finalize(self):
+        """Final method called before exiting the main data processing loop"""
+
         self._save_timings()
         self._pos_interface.deactivate()
         self._decoder.save_occupancy()
@@ -860,6 +964,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 ####################################################################################
 
 class DecoderProcess(base.RealtimeProcess):
+    """Top level object in decoder_process"""
 
     def __init__(self, comm, rank, config, pos_interface, pos_mapper):
         super().__init__(comm, rank, config)
@@ -884,6 +989,7 @@ class DecoderProcess(base.RealtimeProcess):
         )
 
     def main_loop(self):
+        """Main data processing loop"""
 
         try:
             self._decoder_manager.setup_mpi()

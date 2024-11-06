@@ -4,14 +4,19 @@ from enum import IntEnum
 
 from realtime_decoder import messages
 
+"""Describes the type of external data (typically coming from data acquisition)
+that can be processed by the system"""
+
 class Datatypes(IntEnum):
+    '''Numerical "tag" for external data that can be processed by the system'''
     LFP = 1
     SPIKES = 2
     POSITION = 3
-    LINEAR_POSITION = 4
+    LINEAR_POSITION = 4 # not currently used
 
 # Data returned by DataSourceReceivers
 class SpikePoint(messages.PrintableClass):
+    """Object describing a single spike event"""
 
     def __init__(self, timestamp, elec_grp_id, data, t_send_data, t_recv_data):
 
@@ -22,6 +27,7 @@ class SpikePoint(messages.PrintableClass):
         self.t_recv_data = t_recv_data
 
 class LFPPoint(messages.PrintableClass):
+    """Object describing a single LFP data sample"""
 
     def __init__(self, timestamp, elec_grp_ids, data, t_send_data, t_recv_data):
         
@@ -32,6 +38,7 @@ class LFPPoint(messages.PrintableClass):
         self.t_recv_data = t_recv_data
 
 class CameraModulePoint(messages.PrintableClass):
+    """Object describing a single data sample coming from a camera"""
 
     def __init__(
         self, timestamp, segment, position,
@@ -47,7 +54,7 @@ class CameraModulePoint(messages.PrintableClass):
         self.y2 = y2
         self.t_recv_data = t_recv_data
 
-
+##########################################################################
 # These are not currently being used
 class RawPosPoint(messages.PrintableClass):
     def __init__(self, timestamp, x1, y1, x2, y2, camera_id):
@@ -80,3 +87,4 @@ class SystemTimePoint(messages.PrintableClass):
         self.timestamp = timestamp
         self.tv_sec = tv_sec
         self.tv_nsec = tv_nsec
+##########################################################################

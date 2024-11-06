@@ -11,6 +11,8 @@ from typing import List
 
 from realtime_decoder import logging_base, messages
 
+"""Contains objects relevant to reading and writing records in binary form"""
+
 class RecordIDs(IntEnum):
     """The numeric ID for each record type
     """
@@ -33,9 +35,11 @@ class RecordIDs(IntEnum):
     STIM_HEAD_DIRECTION = 13
     STIM_RIPPLE_DETECTED = 14
     STIM_RIPPLE_END = 15
+    STIM_RIPPLE_EVENT = 16
 
-    RIPPLE_DETECTED = 20 
+    RIPPLE_DETECTED = 20
     RIPPLE_END = 21
+    RIPPLE_EVENT = 22
 
     TIMING = 100
 
@@ -126,6 +130,8 @@ class BinaryRecordsManager(object):
             self._rec_label_dict.update({rec_id: rec_labels})
 
     def get_new_writer_message(self):
+        """Obtain a message that will be used to instantiate a writer object"""
+
         message = messages.BinaryRecordCreate(
             self._manager_label, self._next_file_index, self._save_dir, self._file_prefix,
             self._file_postfix, self._rec_label_dict, self._rec_format_dict, self._num_digits
@@ -216,6 +222,8 @@ class BinaryRecordsFileWriter(logging_base.LoggingClass):
         self._rec_counter = 0
 
     def start_record_writing(self):
+        """Initializes the record writing process by opening the
+        output file and writing its header"""
         
         header = json.dumps(
             OrderedDict(
@@ -288,11 +296,14 @@ class BinaryRecordsFileWriter(logging_base.LoggingClass):
             self._file_handle.close()
 
 class BinaryRecordsFileReader(logging_base.LoggingClass):
+    """Reads a binary record file"""
 
     def __init__(
         self, save_dir, file_prefix, mpi_rank, num_digits,
         manager_label, file_postfix, *, metadata=False
     ):
+
+        super().__init__()
 
         # self._save_dir = save_dir
         # self._file_prefix = file_prefix
@@ -400,6 +411,8 @@ class BinaryRecordsFileReader(logging_base.LoggingClass):
         return c_bytes.split(b'\0')[0].decode('utf-8')
 
     def convert_to_pandas(self):
+        """Convert binary record file to a dictionary of pandas dataframes"""
+
         # find start of data
         self._file_handle = open(self._filepath, 'rb')
         self._file_handle.seek(self._data_start_byte)

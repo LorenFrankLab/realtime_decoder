@@ -7,6 +7,7 @@ import logging.config
 
 import oyaml as yaml
 
+from multiprocessing import cpu_count
 from mpi4py import MPI
 
 from realtime_decoder import (
@@ -244,11 +245,13 @@ def setup(config_path, numprocs):
 
 if __name__ == "__main__":
 
+    comm = MPI.COMM_WORLD
+
     # parse the command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help="Path to config file")
     parser.add_argument(
-        '--numprocs', '-n', type=int, default=20,
+        '--numprocs', '-n', type=int, default=comm.Get_size(),
         help="Max number of processes to spawn during record merging"
     )
 

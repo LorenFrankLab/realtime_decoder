@@ -4,6 +4,10 @@ import numpy as np
 from enum import IntEnum
 from typing import Sequence, Dict
 
+"""Contains objects relevant to messages that are passed
+between MPI processes. These are different from data originating
+from neural sources; for those see datatypes.py"""
+
 class MPIMessageTag(IntEnum):
     """Tags for messages passed between MPI processes
     """
@@ -113,8 +117,8 @@ class TerminateSignal(PrintableClass):
     """Communicates that a process should be terminated
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, *, exit_code=0):
+        self.exit_code = 0
 
 class SetupComplete(PrintableClass):
     """Communicates that setup is complete for all processes
@@ -139,6 +143,7 @@ class VerifyStillAlive(PrintableClass):
         pass
 
 class GuiMainParameters(PrintableClass):
+    """Parameters sent from the GUI process to the main process"""
 
     def __init__(
         self, *, replay_target_arm:int=None,
@@ -168,6 +173,8 @@ class GuiMainParameters(PrintableClass):
 
 class GuiRippleParameters(PrintableClass):
 
+    """Parameters relevant to ripple detection and changed in the GUI"""
+
     def __init__(
         self, *, velocity_threshold:float=None,
         ripple_threshold:float=None,
@@ -185,6 +192,8 @@ class GuiRippleParameters(PrintableClass):
 
 class GuiEncodingModelParameters(PrintableClass):
 
+    """Parameters controlling the encoding model and changed in the GUI"""
+
     def __init__(
         self, *, encoding_velocity_threshold:float=None,
         freeze_model:bool=None
@@ -194,6 +203,9 @@ class GuiEncodingModelParameters(PrintableClass):
 
 
 def get_dtype(msg_type:str, *, config:Dict={}):
+
+    """Returns numpy datatypes for specific types of messages
+    passed between MPI processes"""
 
     # Note: there might be an issue if we're passing data
     # between machines with different native byte order

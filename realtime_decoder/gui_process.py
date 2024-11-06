@@ -26,6 +26,7 @@ _DEFAULT_GUI_PARAMS = {
 }
 
 def _show_message(parent, text, *, kind=None):
+    """Show a pop up message"""
 
     if kind is None:
         kind = QMessageBox.NoIcon
@@ -56,6 +57,7 @@ def _show_message(parent, text, *, kind=None):
 ####################################################################################
 
 class DialogSendInterface(base.StandardMPISendInterface):
+    """Sending interface object for GUI process"""
 
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
@@ -68,6 +70,8 @@ class DialogSendInterface(base.StandardMPISendInterface):
         )
 
     def send_ripple_params(self, params):
+        """Send parameters relevant for ripple detection"""
+
         for rank in self.config['rank']['ripples']:
             self.comm.send(
                 obj=params, dest=rank,
@@ -75,6 +79,7 @@ class DialogSendInterface(base.StandardMPISendInterface):
             )
 
     def send_encoding_model_params(self, params):
+        """Send parameters relevant for encoding models"""
 
         ranks = (
             self.config['rank']['encoders'] +
@@ -87,6 +92,9 @@ class DialogSendInterface(base.StandardMPISendInterface):
             )
 
     def send_startup(self):
+        """Send message telling MainProcess to initiate startup
+        sequence"""
+
         self.comm.send(
             obj=messages.StartupSignal(),
             dest=self.config['rank']['supervisor'][0],
@@ -94,6 +102,9 @@ class DialogSendInterface(base.StandardMPISendInterface):
         )
 
     def send_shutdown(self):
+        """Send message telling MainProcess to initiate
+        shutdown sequence"""
+
         self.comm.send(
             obj=messages.TerminateSignal(),
             dest=self.config['rank']['supervisor'][0],
@@ -101,6 +112,8 @@ class DialogSendInterface(base.StandardMPISendInterface):
         )
 
 class GenericGuiRecvInterface(base.MPIRecvInterface):
+    """Interface object for receiving a non neural data (MPI)
+    message"""
 
     def __init__(
         self, comm, rank, config,
@@ -119,6 +132,8 @@ class GenericGuiRecvInterface(base.MPIRecvInterface):
         )
 
     def receive(self):
+        """Test whether a message is available, and if so, process it"""
+
         rdy = self._req.Test(status=self._mpi_status)
         if rdy:
             msg = np.frombuffer(self._msg_buffer, dtype=self._msg_dtype)
@@ -129,6 +144,8 @@ class GenericGuiRecvInterface(base.MPIRecvInterface):
             )
 
 class ArmEventsRecvInterface(base.MPIRecvInterface):
+    """Interface object for receiving data about the number of
+    rewarded arms"""
 
     def __init__(self, comm, rank, config, msg_handler):
         super().__init__(comm, rank, config)
@@ -144,6 +161,8 @@ class ArmEventsRecvInterface(base.MPIRecvInterface):
         )
 
     def receive(self):
+        """Test whether a message is available, and if so, process it"""
+
         rdy = self._req.Test(status=self._mpi_status)
         if rdy:
             self._msg_handler.handle_message(
@@ -160,6 +179,7 @@ class ArmEventsRecvInterface(base.MPIRecvInterface):
 ####################################################################################
 
 class TabbedDialog(QDialog):
+    """Dialog window used for control and modifying parameters"""
 
     def __init__(self, parent, comm, rank, config):
         super().__init__(parent)
@@ -193,6 +213,8 @@ class TabbedDialog(QDialog):
         self._setup_control_tab()
 
     def _setup_params_tab(self):
+        """Set up the parameters tab"""
+
         self._params_tab = QWidget()
 
         layout = QGridLayout(self._params_tab)
@@ -205,6 +227,8 @@ class TabbedDialog(QDialog):
         self._tab_widget.addTab(self._params_tab, self.tr("Parameters"))
 
     def _setup_stim_params(self, layout):
+        """Set up the stimulation parameters tab"""
+
         self._stim_label = QLabel(self.tr("Stimulation"))
         self._stim_label.setStyleSheet("font-weight: bold")
         layout.addWidget(self._stim_label, 0, 0)
@@ -223,6 +247,8 @@ class TabbedDialog(QDialog):
         self._setup_head_direction_stim(layout)
 
     def _setup_instructive_task(self, layout):
+        """Set up the label showing whether this is an instructive
+        task or not"""
 
         text = 'Task: '
         if self._config['stimulation']['instructive']:
@@ -234,6 +260,7 @@ class TabbedDialog(QDialog):
         layout.addWidget(self._instructive_task_label, 1, 0)
 
     def _setup_target_arm(self, layout):
+        """Set up widgets and data related to the replay target arm"""
 
         self._target_arm_label = QLabel(self.tr("Replay target arm"))
         layout.addWidget(self._target_arm_label, 2, 0)
@@ -257,6 +284,9 @@ class TabbedDialog(QDialog):
         self._main_params.replay_target_arm = arm
 
     def _setup_post_thresh(self, layout):
+        """Set up widgets and data related to posterior
+        threshold (see documentation for more info)"""
+
         self._post_label = QLabel(self.tr("Posterior threshold"))
         self._post_label.setToolTip("Just a helpful tool tip")
         layout.addWidget(self._post_label, 3, 0)
@@ -275,6 +305,9 @@ class TabbedDialog(QDialog):
         self._main_params.posterior_threshold = value
 
     def _setup_max_center_well_distance(self, layout):
+        """Set up widgets and data related to the maximum distance from
+        the center well that is allowed to qualify a replay event"""
+
         self._max_center_well_label = QLabel(self.tr("Max center well distance"))
         layout.addWidget(self._max_center_well_label, 4, 0)
 
@@ -290,6 +323,9 @@ class TabbedDialog(QDialog):
         self._main_params.max_center_well_distance = value
 
     def _setup_num_above_thresh(self, layout):
+        """Set up widgets and data related to number of electrode
+        groups above threshold (see documentation)"""
+
         self._num_above_label = QLabel(self.tr("Num. trodes above threshold"))
         layout.addWidget(self._num_above_label, 5, 0)
 
@@ -305,6 +341,9 @@ class TabbedDialog(QDialog):
         self._main_params.num_above_threshold = value
 
     def _setup_min_duration(self, layout):
+        """Set up widgets and data related to the minimum amount of time
+        needed to qualify as a head direction event"""
+
         self._min_duration_label = QLabel(self.tr("Min duration head angle"))
         layout.addWidget(self._min_duration_label, 6, 0)
 
@@ -322,6 +361,9 @@ class TabbedDialog(QDialog):
         self._main_params.min_duration = value
 
     def _setup_well_angle_range(self, layout):
+        """Set up widgets and data related to the well angle range
+        (see documentation)"""
+
         self._well_angle_range_label = QLabel(self.tr("Well angle range"))
         layout.addWidget(self._well_angle_range_label, 7, 0)
 
@@ -339,6 +381,9 @@ class TabbedDialog(QDialog):
         self._main_params.well_angle_range = value
 
     def _setup_within_angle_range(self, layout):
+        """Set up widgets and data related to the within angle range
+        (see documentation)"""
+
         self._within_angle_range_label = QLabel(self.tr("Within angle range"))
         layout.addWidget(self._within_angle_range_label, 8, 0)
 
@@ -356,6 +401,9 @@ class TabbedDialog(QDialog):
         self._main_params.within_angle_range = value
 
     def _setup_rotate_180(self, layout):
+        """Set up widgets and data related to whether or not to rotate
+        the head angle vector by 180 degrees"""
+
         self._rotate_180_label = QLabel(self.tr("Rotate head vector 180"))
         layout.addWidget(self._rotate_180_label, 9, 0)
 
@@ -380,6 +428,9 @@ class TabbedDialog(QDialog):
             self._main_params.rotate_180 = False
 
     def _setup_replay_stim(self, layout):
+        """Set up widgets and data related to whether replay
+        stimulation is enabled"""
+
         self._replay_stim_label = QLabel(self.tr("Replay stim"))
         layout.addWidget(self._replay_stim_label, 10, 0)
 
@@ -404,6 +455,9 @@ class TabbedDialog(QDialog):
             self._main_params.replay_stim_enabled = False
 
     def _setup_ripple_stim(self, layout):
+        """Set up widgets and data related to whether stimulation
+        based on ripple events is enabled"""
+
         self._ripple_stim_label = QLabel(self.tr("Ripple stim"))
         layout.addWidget(self._ripple_stim_label, 11, 0)
 
@@ -428,6 +482,9 @@ class TabbedDialog(QDialog):
             self._main_params.ripple_stim_enabled = False
 
     def _setup_head_direction_stim(self, layout):
+        """Set up widgets and data related to whether stimulation
+        based on head direction to a reward well is enabled"""
+
         self._hdir_stim_label = QLabel(self.tr("Head direction stim"))
         layout.addWidget(self._hdir_stim_label, 12, 0)
 
@@ -452,6 +509,8 @@ class TabbedDialog(QDialog):
             self._main_params.head_direction_stim_enabled = False
 
     def _setup_ripple_params(self, layout):
+        """Set up the ripple parameters widgets"""
+
         self._ripple_label = QLabel(self.tr("Ripple"))
         self._ripple_label.setStyleSheet("font-weight: bold")
         layout.addWidget(self._ripple_label, 13, 0)
@@ -463,6 +522,9 @@ class TabbedDialog(QDialog):
         self._setup_end_rip_thresh(layout)
 
     def _setup_ripple_detect_vel(self, layout):
+        """Set up widgets and data for the maximum velocity allowed for a
+        ripple event"""
+
         self._ripple_vel_thresh_label = QLabel(self.tr("Ripple velocity threshold"))
         layout.addWidget(self._ripple_vel_thresh_label, 14, 0)
 
@@ -478,6 +540,8 @@ class TabbedDialog(QDialog):
         self._ripple_params.velocity_threshold = value
 
     def _setup_rip_thresh(self, layout):
+        """Set up widgets and data for standard ripple threshold"""
+
         self._rip_thresh_label = QLabel(self.tr("Ripple threshold"))
         layout.addWidget(self._rip_thresh_label, 15, 0)
 
@@ -493,6 +557,8 @@ class TabbedDialog(QDialog):
         self._ripple_params.ripple_threshold = value
 
     def _setup_cond_rip_thresh(self, layout):
+        """Set up widgets and data for conditioning ripple threshold"""
+
         self._cond_rip_thresh_label = QLabel(
             self.tr("Conditioning ripple threshold")
         )
@@ -512,6 +578,8 @@ class TabbedDialog(QDialog):
         self._ripple_params.conditioning_ripple_threshold = value
 
     def _setup_content_rip_thresh(self, layout):
+        """Set up widgets and data for content ripple threshold"""
+
         self._content_rip_thresh_label = QLabel(
             self.tr("Content ripple threshold")
         )
@@ -531,6 +599,8 @@ class TabbedDialog(QDialog):
         self._ripple_params.content_ripple_threshold = value
 
     def _setup_end_rip_thresh(self, layout):
+        """Set up widgets and data for end of ripple threshold"""
+
         self._end_rip_thresh_label = QLabel(
             self.tr("End of ripple threshold")
         )
@@ -550,6 +620,8 @@ class TabbedDialog(QDialog):
         self._ripple_params.end_ripple_threshold = value
 
     def _setup_model_params(self, layout):
+        """Set up widgets for encoding model parameters"""
+
         self._model_label = QLabel(self.tr("Encoding Model"))
         self._model_label.setStyleSheet("font-weight: bold")
         layout.addWidget(self._model_label, 19, 0)
@@ -557,6 +629,9 @@ class TabbedDialog(QDialog):
         self._setup_encoding_model_vel(layout)
 
     def _setup_encoding_model_vel(self, layout):
+        """Set up widgets and data for minimum velocity for data to be
+        added to encoding model"""
+
         self._encoding_vel_thresh_label = QLabel(self.tr("Encoding velocity threshold"))
         layout.addWidget(self._encoding_vel_thresh_label, 20, 0)
 
@@ -572,6 +647,8 @@ class TabbedDialog(QDialog):
         self._model_params.encoding_velocity_threshold = value
 
     def _setup_control_tab(self):
+        """Set up decoder control tab"""
+
         self._control_tab = QWidget()
         layout = QGridLayout(self._control_tab)
         self._tab_widget.addTab(self._control_tab, self.tr("Control"))
@@ -587,6 +664,8 @@ class TabbedDialog(QDialog):
         self._shutdown_button.setEnabled(False)
 
     def _setup_general_control(self, layout):
+        """Set up control buttons"""
+    
         self._general_control_label = QLabel(self.tr("General"))
         self._general_control_label.setStyleSheet("font-weight: bold")
         layout.addWidget(self._general_control_label, 0, 0)
@@ -597,6 +676,8 @@ class TabbedDialog(QDialog):
         # self.update_start_buttons(False)
 
     def _setup_startup(self, layout):
+        """Set up startup button"""
+
         self._startup_button = QPushButton(self.tr("Startup"))
         layout.addWidget(self._startup_button, 1, 0)
 
@@ -605,6 +686,8 @@ class TabbedDialog(QDialog):
         )
 
     def _setup_shutdown(self, layout):
+        """Set up shutdown button"""
+
         self._shutdown_button = QPushButton(self.tr("Shutdown"))
         layout.addWidget(self._shutdown_button, 1, 1)
 
@@ -613,6 +696,8 @@ class TabbedDialog(QDialog):
         )
 
     def _setup_ripple_control(self, layout):
+        """Set up widgets for controlling ripple statistics updating"""
+
         self._ripple_control_label = QLabel(self.tr("Ripple"))
         self._ripple_control_label.setStyleSheet("font-weight: bold")
         layout.addWidget(self._ripple_control_label, 2, 0)
@@ -620,6 +705,7 @@ class TabbedDialog(QDialog):
         self._setup_ripple_freeze(layout)
 
     def _setup_ripple_freeze(self, layout):
+        """Set up widgets and data for controlling ripple statistics updating"""
 
         self._is_ripple_stats_frozen = self._config['ripples']['freeze_stats']
         if self._is_ripple_stats_frozen:
@@ -637,6 +723,8 @@ class TabbedDialog(QDialog):
         self._ripple_params.freeze_stats = self._is_ripple_stats_frozen
 
     def _setup_encoding_control(self, layout):
+        """Set up widgets for controlling encoding model updating"""
+
         self._encoding_freeze_label = QLabel(self.tr("Encoding"))
         self._encoding_freeze_label.setStyleSheet("font-weight: bold")
         layout.addWidget(self._encoding_freeze_label, 4, 0)
@@ -644,6 +732,7 @@ class TabbedDialog(QDialog):
         self._setup_encoding_freeze(layout)
 
     def _setup_encoding_freeze(self, layout):
+        """Set up widgets and data for controlling encoding model updating"""
 
         self._is_encoding_model_frozen = self._config['frozen_model']
         if self._is_encoding_model_frozen:
@@ -661,6 +750,7 @@ class TabbedDialog(QDialog):
         self._model_params.freeze_model = self._is_encoding_model_frozen
 
     def _check_target_arm(self):
+        """Input validation for updating target arm parameter"""
 
         target_arm = self._target_arm_edit.text()
 
@@ -689,6 +779,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_post_thresh(self):
+        """Input validation for posterior threshold parameter"""
+
         post_thresh = self._post_edit.text()
 
         try:
@@ -713,6 +805,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_max_center_well(self):
+        """Input validation for max center well distance parameter"""
+
         dist = self._max_center_well_edit.text()
 
         try:
@@ -738,6 +832,9 @@ class TabbedDialog(QDialog):
             )
 
     def _check_num_above(self):
+        """Input validation for number of electrodes above ripple threshold
+        parameter"""
+
         max_n_above = len(self._config["trode_selection"]["ripples"])
         n_above = self._num_above_edit.text()
 
@@ -773,6 +870,9 @@ class TabbedDialog(QDialog):
             )
 
     def _check_min_duration(self):
+        """Input validation for minimum duration of head direction
+        event parameter"""
+
         min_duration = self._min_duration_edit.text()
 
         try:
@@ -797,6 +897,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_well_angle_range(self):
+        """Input validation for well angle range parameter"""
+
         well_angle_range = self._well_angle_range_edit.text()
 
         try:
@@ -823,6 +925,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_within_angle_range(self):
+        """Input validation for within-angle angle range parameter"""
+
         within_angle_range = self._within_angle_range_edit.text()
 
         try:
@@ -849,6 +953,9 @@ class TabbedDialog(QDialog):
             )
 
     def _check_rotate_180(self):
+        """Check whether the head direction vector is requested
+        to be rotated 180 degrees and send corresponding message"""
+
         rotate_180 = self._rotate_180_yes.isChecked()
         try:
             if rotate_180:
@@ -872,6 +979,9 @@ class TabbedDialog(QDialog):
             )
 
     def _check_replay_stim(self):
+        """Check whether stimulation based on replay events is
+        requested to be enabled and send corresponding message"""
+
         replay_stim_on = self._replay_stim_on.isChecked()
         try:
             if replay_stim_on:
@@ -897,6 +1007,9 @@ class TabbedDialog(QDialog):
             )
 
     def _check_ripple_stim(self):
+        """Check whether stimulation based on ripple events
+        requested to be enabled and send corresponding message"""
+
         ripple_stim_on = self._ripple_stim_on.isChecked()
         try:
             if ripple_stim_on:
@@ -922,6 +1035,9 @@ class TabbedDialog(QDialog):
             )
 
     def _check_hdir_stim(self):
+        """Check whether stimulation based on head direction events
+        is requested to be enabled and send corresponding message"""
+
         hdir_stim_on = self._hdir_stim_on.isChecked()
         try:
             if hdir_stim_on:
@@ -947,6 +1063,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_ripple_vel_thresh(self):
+        """Input validation for ripple detection velocity threshold parameter"""
+
         ripple_vel_thresh = self._ripple_vel_thresh_edit.text()
 
         try:
@@ -969,6 +1087,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_rip_thresh(self):
+        """Input validation for standard ripple threshold parameter"""
+
         rip_thresh = self._rip_thresh_edit.text()
         try:
             rip_thresh = float(rip_thresh)
@@ -990,6 +1110,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_cond_rip_thresh(self):
+        """Input validation for conditioning ripple threshold parameter"""
+
         cond_rip_thresh = self._cond_rip_thresh_edit.text()
         try:
             cond_rip_thresh = float(cond_rip_thresh)
@@ -1011,6 +1133,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_content_rip_thresh(self):
+        """Input validation for content ripple threshold parameter"""
+
         content_rip_thresh = self._content_rip_thresh_edit.text()
         try:
             content_rip_thresh = float(content_rip_thresh)
@@ -1032,6 +1156,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_end_rip_thresh(self):
+        """Input validation for end of ripple threshold parameter"""
+
         end_rip_thresh = self._end_rip_thresh_edit.text()
         try:
             end_rip_thresh = float(end_rip_thresh)
@@ -1053,6 +1179,8 @@ class TabbedDialog(QDialog):
             )
 
     def _check_encoding_vel_thresh(self):
+        """Input validation for encoding velocity threshold parameter"""
+
         encoding_vel_thresh = self._encoding_vel_thresh_edit.text()
         try:
             encoding_vel_thresh = float(encoding_vel_thresh)
@@ -1074,18 +1202,22 @@ class TabbedDialog(QDialog):
             )
 
     def _initiate_startup(self):
+        """Initiate startup sequence"""
 
         # send startup signal
         self._send_interface.send_startup()
         self._startup_button.setEnabled(False)
 
     def _initiate_shutdown(self):
+        """Initiate shutdown sequence"""
 
         # send terminate signal
         self._send_interface.send_shutdown()
         self._shutdown_button.setEnabled(False)
 
     def _check_ripple_freeze(self):
+        """Determine what to do when the freeze ripple states button
+        is toggled"""
 
         if self._is_ripple_stats_frozen:
             self._is_ripple_stats_frozen = False
@@ -1098,6 +1230,8 @@ class TabbedDialog(QDialog):
         self._send_ripple_params()
 
     def _check_encoding_freeze(self):
+        """Determine what to do when the freeze encoding model button
+        is toggled"""
 
         if self._is_encoding_model_frozen:
             self._is_encoding_model_frozen = False
@@ -1110,41 +1244,58 @@ class TabbedDialog(QDialog):
         self._send_encoding_model_params()
 
     def _send_main_params(self):
+        """Send parameters to be received in main_process"""
+
         print(self._main_params)
         self._send_interface.send_main_params(
             self._main_params
         )
 
     def _send_ripple_params(self):
+        """Send ripple detection parameters"""
+
         print(self._ripple_params)
         self._send_interface.send_ripple_params(
             self._ripple_params
         )
 
     def _send_encoding_model_params(self):
+        """Send encoding model parameters"""
+
         print(self._model_params)
         self._send_interface.send_encoding_model_params(
             self._model_params
         )
 
     def _send_all_params(self):
+        """Send all parameters"""
+
         self._send_main_params()
         self._send_ripple_params()
         self._send_encoding_model_params()
 
     def enable_general_control(self):
+        """Allow user to start or shutdown the system"""
+
         self._startup_button.setEnabled(True)
         self._shutdown_button.setEnabled(True)
 
     def update_start_buttons(self):
+        """Update the decoder control buttons"""
+
         self._startup_button.setEnabled(False)
         self._shutdown_button.setEnabled(True)
 
     def run(self):
+        """Run the processing for the dialog window"""
+
         if self._timer is not None:
             self._timer.start()
 
     def closeEvent(self, event):
+        """Method called when user attempts to close the
+        dialog window"""
+
         _show_message(
             self,
             "Processes not finished running. Closing GUI dialog is disabled",
@@ -1152,6 +1303,7 @@ class TabbedDialog(QDialog):
         event.ignore()
 
 class DecodingResultsWindow(QMainWindow):
+    """Window for visualizing decoding plots"""
 
     def __init__(self, comm, rank, config):
         super().__init__()
@@ -1208,6 +1360,8 @@ class DecodingResultsWindow(QMainWindow):
         self._ok_to_terminate = False
 
     def _setup_interfaces(self, comm, rank, config):
+        """Set up interfaces used to receive MPI messages"""
+
         self._send_interface = base.StandardMPISendInterface(
             comm, rank, config
         )
@@ -1233,6 +1387,7 @@ class DecodingResultsWindow(QMainWindow):
         )
 
     def _init_plots(self):
+        """Initialize plots"""
 
         self._decoder_rank_ind_map = OrderedDict()
         for ii, rank in enumerate(self._config["rank"]["decoders"]):
@@ -1297,6 +1452,7 @@ class DecodingResultsWindow(QMainWindow):
         self._set_plot_ticks(num_plots, dt, N, num_xticks)
 
     def _init_colormap(self):
+        """Initialize colormap for the plots"""
 
         try:
             cmap = sns.color_palette(
@@ -1325,6 +1481,7 @@ class DecodingResultsWindow(QMainWindow):
             post_image.setImage(self._data['post'][ii].T)
 
     def _set_plot_ticks(self, num_plots, dt, num_time_bins, num_xticks):
+        """Set the plot ticks at regularly spaced intervals"""
 
         for ii in range(num_plots):
 
@@ -1337,6 +1494,7 @@ class DecodingResultsWindow(QMainWindow):
             self._plots['state'][ii].getAxis("bottom").setTicks(tick_data)
 
     def _setup_lk_plots(self, num_plots, bin_edges, arm_coords):
+        """Set up the plots visualizing likelihoods"""
 
         for ii in range(num_plots):
 
@@ -1377,6 +1535,7 @@ class DecodingResultsWindow(QMainWindow):
                 )
 
     def _setup_posterior_plots(self, num_plots, bin_edges, arm_coords):
+        """Set up the plots visualizing the posterior"""
 
         for ii in range(num_plots):
 
@@ -1418,6 +1577,8 @@ class DecodingResultsWindow(QMainWindow):
 
     # TODO(DS): Change this to a consensus ripple power 
     def _setup_state_prob_plots(self, num_plots, labels, colors):
+        """Set up the plots visualizing state probabilities"""
+
         for ii in range(num_plots):
 
             dec_rank = self._config['rank']['decoders'][ii]
@@ -1448,6 +1609,8 @@ class DecodingResultsWindow(QMainWindow):
                 )
 
     def _update(self):
+        """Receive any new messages and potentially update plot data"""
+
         self._command_interface.receive()
         self._posterior_interface.receive()
         self._arm_events_interface.receive()
@@ -1459,6 +1622,7 @@ class DecodingResultsWindow(QMainWindow):
 
     #NOTE(DS): This updates the display data
     def _update_display_data(self):
+        """Update plot data"""
 
         # set plot data
         for ii in range(len(self._plots['lk'])):
@@ -1481,6 +1645,8 @@ class DecodingResultsWindow(QMainWindow):
                 )
 
     def handle_message(self, msg, mpi_status):
+        """Process a (non neural data) received MPI message"""
+
         if isinstance(msg, messages.SetupComplete):
             if not self._is_setup_complete:
                 _show_message(
@@ -1521,6 +1687,7 @@ class DecodingResultsWindow(QMainWindow):
             )
 
     def _update_lk_post_data(self, msg, mpi_status):
+        """Update plot data for the likelihood and posterior plots"""
 
         sender = mpi_status.source
         plot_ind = self._decoder_rank_ind_map[mpi_status.source]
@@ -1548,6 +1715,7 @@ class DecodingResultsWindow(QMainWindow):
         )
 
     def _update_dropped_spikes(self, msg, mpi_status):
+        """Update data keeping track of dropped spikes"""
 
         sender = mpi_status.source
         assert sender == msg[0]['rank']
@@ -1558,6 +1726,8 @@ class DecodingResultsWindow(QMainWindow):
         self._update_status_bar()
 
     def _update_arm_events(self, msg, mpi_status):
+        """Update data keeping track of events detected
+        at different arms"""
 
         for ii, num_events in enumerate(msg):
             self._sbdata['arm_events'][ii] = num_events
@@ -1565,6 +1735,7 @@ class DecodingResultsWindow(QMainWindow):
         self._update_status_bar()
 
     def _update_status_bar(self):
+        """Update the status bar"""
 
         sb_string = ""
         for ii, num_events in enumerate(self._sbdata['arm_events']):
@@ -1583,10 +1754,14 @@ class DecodingResultsWindow(QMainWindow):
         self.statusBar().showMessage(sb_string)
 
     def show_all(self):
+        """Show this window and the dialog window"""
+
         self.show()
         self._dialog.show()
 
     def run(self):
+        """Run the processing loop"""
+
         if self._config['preloaded_model']:
             _show_message(
                 self, "Using preloaded encoding model",
@@ -1597,6 +1772,8 @@ class DecodingResultsWindow(QMainWindow):
         self._dialog.run()
 
     def closeEvent(self, event):
+        """Method called when user attempts to close the window"""
+
         if not self._ok_to_terminate:
             _show_message(
                 self,
@@ -1611,6 +1788,7 @@ class DecodingResultsWindow(QMainWindow):
 ####################################################################################
 
 class GuiProcess(base.RealtimeProcess):
+    """Top level object for gui_process"""
 
     def __init__(self, comm, rank, config):
         super().__init__(comm, rank, config)
@@ -1621,6 +1799,8 @@ class GuiProcess(base.RealtimeProcess):
         self._main_window = DecodingResultsWindow(comm, rank, config)
 
     def main_loop(self):
+        """Main GUI processing loop"""
+
         self._main_window.show_all()
         self._main_window.run()
         self._app.exec()
