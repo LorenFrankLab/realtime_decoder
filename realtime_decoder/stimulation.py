@@ -633,7 +633,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         # are not met
         if not (
             ts > self._replay_event_ts + self._replay_event_ls and
-            num_unique >= self.p_replay['min_unique_trodes'] and
             self._is_center_well_proximate
         ):
             return
@@ -727,8 +726,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         # assumes already satisfied event lockout and minimum unique
         # trodes criteria. all these events should therefore be recorded
 
-        print(f"Replay arm {arm} detected")
-
         self._replay_event_ts = msg[0]['bin_timestamp_r']
 
         num_spikes_in_event = np.count_nonzero(self._enc_ci_buff)
@@ -737,51 +734,57 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         trodes_of_spike = self._enc_ci_buff[self._enc_ci_buff != 0]
 
         print(self._enc_ci_buff)
+        if num_unique == 1:
+            print(f"Replay arm {arm} detected in ts {self._task_state} with 1 unique trodes")
+        if num_unique > 1: 
+            print(f"Replay arm {arm} detected in ts {self._task_state} with >1 unique trodes")
+
         print(f"num spikes : {num_spikes_in_event}, {trodes_of_spike}")
         print(f"Unique trodes: {num_unique}, {np.unique(trodes_of_spike)}")
-        print(f"task state: {self._task_state}")
+        print(f"")
 
-        send_shortcut = self._check_send_shortcut(
-            self.p_replay['enabled']
-        )
+        if num_unique >= self.p_replay['min_unique_trodes']:
+            send_shortcut = self._check_send_shortcut(
+                self.p_replay['enabled']
+            )
 
-        if send_shortcut:
-            if arm == 1:
-                self._trodes_client.send_statescript_shortcut_message(14)
-                self._num_rewards[arm] += 1
-                self.send_interface.send_num_rewards(self._num_rewards)
-                print(f"Replay arm {arm} scm sent")
-            elif arm == 2:
-                self._trodes_client.send_statescript_shortcut_message(6)
-                self._num_rewards[arm] += 1
-                self.send_interface.send_num_rewards(self._num_rewards)
-                print(f"Replay arm {arm} scm sent")
-            else: 
-                print('ERROR: Replay arms are not 1 or 2. see stimulation.py') 
-            print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}")
+            if send_shortcut:
+                if arm == 1:
+                    self._trodes_client.send_statescript_shortcut_message(14)
+                    self._num_rewards[arm] += 1
+                    self.send_interface.send_num_rewards(self._num_rewards)
+                    print(f"Replay arm {arm} scm sent")
+                elif arm == 2:
+                    self._trodes_client.send_statescript_shortcut_message(6)
+                    self._num_rewards[arm] += 1
+                    self.send_interface.send_num_rewards(self._num_rewards)
+                    print(f"Replay arm {arm} scm sent")
+                else: 
+                    print('ERROR: Replay arms are not 1 or 2. see stimulation.py') 
+                print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}")
 
 
-        self.write_record(
-            binary_record.RecordIDs.STIM_MESSAGE,
-            msg[0]['bin_timestamp_l'], msg[0]['bin_timestamp_r'],
-            send_shortcut, self._delay, self._current_vel, self._current_pos,
-            self._task_state, arm, self.p_replay['target_arm'],
-            self.p_replay['primary_arm_threshold'], self._max_repeats,
-            self._replay_window_time, self.p['instructive'],
-            num_unique, self._center_well_dist,
-            self.p['max_center_well_dist'],
-            self._is_in_multichannel_ripple['standard'],
-            self._is_in_multichannel_ripple['cond'],
-            self._is_in_multichannel_ripple['content'],
-            self._is_in_consensus_ripple['standard'],
-            self._is_in_consensus_ripple['cond'],
-            self._is_in_consensus_ripple['content'], *self._spike_count,
-            *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
-            *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
-            *self._region_ps_buff.mean(axis=1).flatten(),
-            *self._region_ps_base_buff.mean(axis=1).flatten(),
-            *self._arm_ps_buff.mean(axis=1).flatten()
-        )
+            self.write_record(
+                binary_record.RecordIDs.STIM_MESSAGE,
+                msg[0]['bin_timestamp_l'], msg[0]['bin_timestamp_r'],
+                send_shortcut, self._delay, self._current_vel, self._current_pos,
+                self._task_state, arm, self.p_replay['target_arm'],
+                self.p_replay['primary_arm_threshold'], self._max_repeats,
+                self._replay_window_time, self.p['instructive'],
+                num_unique, self._center_well_dist,
+                self.p['max_center_well_dist'],
+                self._is_in_multichannel_ripple['standard'],
+                self._is_in_multichannel_ripple['cond'],
+                self._is_in_multichannel_ripple['content'],
+                self._is_in_consensus_ripple['standard'],
+                self._is_in_consensus_ripple['cond'],
+                self._is_in_consensus_ripple['content'], *self._spike_count,
+                *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
+                *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
+                *self._region_ps_buff.mean(axis=1).flatten(),
+                *self._region_ps_base_buff.mean(axis=1).flatten(),
+                *self._arm_ps_buff.mean(axis=1).flatten()
+            )
 
     def _find_replay_instructive(self, msg):
 

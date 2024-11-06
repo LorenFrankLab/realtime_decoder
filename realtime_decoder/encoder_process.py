@@ -80,9 +80,9 @@ class Encoder(base.LoggingClass):
             self._mark_idx = 0
             self._occupancy = np.zeros(self._config['encoder']['position']['num_bins'])
             self._occupancy_ct = 0
+            self._temp_idx = 0 # NOTE(DS): so that mark_idx does not increase but still write down in the mark vec
 
         self._init_params()
-
     def _load_model(self):
         files = glob.glob(
             os.path.join(
@@ -127,10 +127,14 @@ class Encoder(base.LoggingClass):
             self._positions[self._mark_idx] = self._position
             self._mark_idx += 1
 
-        else: #NOTE(DS): I changed this part
-            self.class_log.info(
-                f"mark buffer is full. does not increase the marks"
-            )
+        else:
+            self._marks[self._temp_idx%self._marks.shape[0]] = mark
+            self._positions[self._temp_idx%self._marks.shape[0]] = self._position
+            self._temp_idx += 2
+            if self._temp_idx%2000 == 0:
+                self.class_log.info(
+                f"mark buffer is full. substitutes every other markvec {self._temp_idx/2}"
+                )
 
             ''' # NOTE(DS): This make buf_size meaningless
             self._marks = np.vstack((
