@@ -733,15 +733,18 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         trodes_of_spike = self._enc_ci_buff[self._enc_ci_buff != 0]
 
-        print(self._enc_ci_buff)
-        if num_unique == 1:
-            print(f"Replay arm {arm} detected in ts {self._task_state} with 1 unique trodes")
+
+        if num_unique < self.p_replay['min_unique_trodes']:
+            print(f"Replay arm {arm} detected less than min unique trodes in ts {self._task_state}")
         if num_unique > 1: 
-            print(f"Replay arm {arm} detected in ts {self._task_state} with >1 unique trodes")
+            print(f" ")
+            print(f" ")
+            print(f"+++++++++++++++++++++++++++++++")
+            print(self._enc_ci_buff)
+            print(f"Replay arm {arm} detected with more than min unique trodes in ts {self._task_state}")
 
         print(f"num spikes : {num_spikes_in_event}, {trodes_of_spike}")
         print(f"Unique trodes: {num_unique}, {np.unique(trodes_of_spike)}")
-        print(f"")
 
         if num_unique >= self.p_replay['min_unique_trodes']:
             send_shortcut = self._check_send_shortcut(
@@ -762,6 +765,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 else: 
                     print('ERROR: Replay arms are not 1 or 2. see stimulation.py') 
                 print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}")
+
+                print(f"---------------------------------")
+                print(f" ")
+                print(f" ")
 
 
             self.write_record(

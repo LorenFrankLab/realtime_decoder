@@ -188,6 +188,8 @@ def merge_with_temp(config, numprocs):
             print(e)
             pass
 
+    print(reader_list)
+
     l = mp.Lock()
     fname = os.path.join(
         config['files']['output_dir'],

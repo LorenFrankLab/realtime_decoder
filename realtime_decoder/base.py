@@ -282,9 +282,15 @@ class BinaryRecordBase(LoggingClass, metaclass=ABCMeta):
                 f'{self.__class__.__name__} attempted to write unregistered id. '
                 f"rec_id {rec_id}, record: {args}"
             )
+
+
+
         if self._rec_writer and self._rec_writer.is_open:
             self._rec_writer.write_rec(rec_id, *args)
+            print('writing rec')
             return True
+        else:
+            print(f"rec_id: {rec_id}, _rec_writer: {self._rec_writer}, _rec_writer.is_open: {self._rec_writer.is_open}")
         return False
     
 
