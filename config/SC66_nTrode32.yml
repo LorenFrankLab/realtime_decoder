@@ -39,7 +39,7 @@ trodes:
   config_file: '/home/lorenlab/trodes_configs/SC66_v7_thresh_100.trodesconf'
   # taskstate_file and instructive_file are optional,
   # but not necessarily for a custom stim decider
-  taskstate_file: '/home/lorenlab/spykshrk_realtime/config/taskstate.txt'
+  taskstate_file: '/home/lorenlab/realtime_decoder/config/taskstate.txt'
   instructive_file: '/home/lorenlab/spykshrk_realtime/config/instructive_new_arm.txt'
   voltage_scaling_factor: 0.195
 sampling_rate:

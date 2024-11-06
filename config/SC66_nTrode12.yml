@@ -39,7 +39,7 @@ trodes:
   config_file: '/home/lorenlab/trodes_configs/SC66_v7_thresh_100.trodesconf'
   # taskstate_file and instructive_file are optional,
   # but not necessarily for a custom stim decider
-  taskstate_file: '/home/lorenlab/spykshrk_realtime/config/taskstate.txt'
+  taskstate_file: '/home/lorenlab/realtime_decoder/config/taskstate.txt'
   instructive_file: '/home/lorenlab/spykshrk_realtime/config/instructive_new_arm.txt'
   voltage_scaling_factor: 0.195
 sampling_rate:
@@ -78,6 +78,7 @@ ripples:
   #   consensus: 3
 encoder:
   spk_amp: 80 # SC66 specific
+  use_channel_dist_from_max_amp: 2 
   mark_dim: 12
   bufsize: 50000
   timings_bufsize: 50000
@@ -99,6 +100,7 @@ encoder:
       52: [8]
       }
 decoder:
+  decoder_to_message: 1 # 1: decoder 1, 2: decoder 2, 0: all decoders
   bufsize: 2000
   timings_bufsize: 50000
   cred_int_bufsize: 10
@@ -125,7 +127,7 @@ stimulation:
   replay:
     enabled: true
     method: "posterior"
-    target_arm: 1
+    target_arm: 1 #this does not need to be used
     event_lockout: 0.2 # Minimum number of time imposed between successive candidate replay events. Units are in seconds.
     sliding_window: 5 # number of decoder time bins 6ms * 5?
     primary_arm_threshold: 0.4
@@ -141,7 +143,7 @@ stimulation:
     event_lockout: 0
     num_above_thresh: 1
   head_direction:
-    enabled: true
+    enabled: false
     rotate_180: true
     event_lockout: 10
     min_duration: 2
