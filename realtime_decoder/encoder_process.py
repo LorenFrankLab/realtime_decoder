@@ -84,12 +84,15 @@ class Encoder(base.LoggingClass):
 
         self._init_params()
     def _load_model(self):
-        files = glob.glob(
-            os.path.join(
+
+        fname = os.path.join(
                 self._config['files']['saved_model_dir'],
-                f'*trode_{self._trode}.encoder.npz'
+                f"{self._config['files']['saved_model_prefix']}*trode_{self._trode}.encoder.npz"
             )
-        )
+        print(f"encoder model fname: {fname}")
+        
+        files = glob.glob(fname)
+
         if files == []:
             raise ValueError(
                 f"Could not load encoding model successfully!")

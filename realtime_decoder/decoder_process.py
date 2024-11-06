@@ -136,12 +136,13 @@ class ClusterlessDecoder(base.Decoder):
         self._init_params()
 
     def _load_model(self):
-        files = glob.glob(
-            os.path.join(
+        fname = os.path.join(
                 self._config['files']['saved_model_dir'],
-                f'*decoder_rank_{self._rank}.occupancy.npz'
+                f"{self._config['files']['saved_model_prefix']}*decoder_rank_{self._rank}.occupancy.npz"
             )
-        )
+        print(f"decoder model fname: {fname}")
+        
+        files = glob.glob(fname)
 
         if files == []:
             raise ValueError(
