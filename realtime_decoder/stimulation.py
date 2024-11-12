@@ -339,7 +339,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                         )
                         if send_shortcut_message:
                             #self._trodes_client.send_statescript_shortcut_message(22) #NOTE(DS): This has been commented out
-                            print(f"ripple scm sent. rtype: {rtype}, elec_grp: {self._ripple_trodes[rtype]}, zscore: {datapoint_zscore}")
+                            print(f"ripple scm sent. rtype: {rtype}, elec_grp: {trode}, zscore: {datapoint_zscore}")
                         self._ripple_sms[rtype] = send_shortcut_message
 
 
@@ -396,7 +396,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
                 if send_shortcut_message:
                     self._trodes_client.send_statescript_shortcut_message(22)
-                    print(f"cons ripple scm sent. rtype: {rtype}, elec_grp: {self._ripple_trodes[rtype]}, zscore: {datapoint_zscore}")
+                    print(f"cons ripple scm sent. rtype: {rtype}, elec_grp: {trode}, zscore: {datapoint_zscore}")
 
 
                 self._cons_ripple_sms[rtype] = send_shortcut_message

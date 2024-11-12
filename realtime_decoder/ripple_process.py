@@ -96,7 +96,7 @@ class EnvelopeEstimator(base.LoggingClass):
             fs=self._config["sampling_rate"]["lfp"]
         )[:, None]
         self._x_env = np.zeros((self._b_env.shape[0], num_signals))
-
+        print(f"x_env.shape = {self._x_env.shape}")
     def add_new_data(self, data):
         """Add new data point and obtain new estimate of the
         ripple-band filtered data and the envelope"""
@@ -128,7 +128,10 @@ class EnvelopeEstimator(base.LoggingClass):
         # estimate envelope
         self._x_env[1:] = self._x_env[:-1]
         self._x_env[0] = ripple_data**2
-        env = np.sqrt(np.sum(self._b_env * self._x_env, axis=0))
+        env = np.sqrt(np.sum(self._b_env * self._x_env, axis=0)) #NOTE(DS): has sqrt: so likely amplitude?
+        #env = np.sum(self._b_env * self._x_env, axis=0) #NOTE(DS): no sqrt: so likely power 
+
+
 
         return ripple_data, env
 
@@ -281,7 +284,6 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         """Process a new LFP data sample"""
 
         msg_data = msg.data
-
         msg_timestamp = msg.timestamp
         t_send_data = msg.t_send_data
         t_recv_data = msg.t_recv_data
@@ -294,6 +296,8 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         filtered_data, env = self._envelope_estimator.add_new_data(msg_data)
         cons_env = np.mean(env)
 
+
+
         # updates stats
         if not self.p['freeze_stats']:
             self._means, self._M2, self._counts = utils.estimate_new_stats(
@@ -305,6 +309,19 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                 cons_env, self._cons_mean, self._cons_M2, self._cons_count
             )
             self._cons_sigma = np.sqrt(self._cons_M2 / self._cons_count)
+
+
+
+        datapoint_zscore_consensus = (cons_env - self._cons_mean)/self._cons_sigma
+
+        #NOTE(DS): The problem of this is where it only considers one electrode at a time
+        self._send_ripple_message_to_GUI(
+                    timestamp = msg_timestamp,
+                    elec_grp_id = -1, #-1 meaning consensus
+                    ripple_type = "consensus",
+                    is_consensus = 1,
+                    datapoint_zscore = datapoint_zscore_consensus
+        )
 
         # detect start/end of ripples
         for ii, trode in enumerate(self._lockout_sample.keys()):
@@ -379,6 +396,12 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         in_content_ripple = self._in_ripple[trode]['content']
 
         datapoint_zscore = (datapoint - mean)/sigma
+        '''
+        #NOTE(DS): The problem of this is where it only considers one electrode at a time; so deprecated, i am using consensus 
+        self._send_ripple_message_to_GUI(
+                    timestamp, trode, "standard", is_consensus_trace,datapoint_zscore
+        )
+        '''
 
         if lockout_sample == 0: # ok to detect ripples
             # note that velocity threshold is used only when detecting the
@@ -490,6 +513,26 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             self._config['rank']['supervisor'][0],
             self._ripple_msg
         )
+
+    def _send_ripple_message_to_GUI(
+            self, timestamp, elec_grp_id, ripple_type,
+            is_consensus,datapoint_zscore = np.nan
+        ):
+            """Send a message that a ripple event was detected"""
+
+            self._ripple_msg[0]['timestamp'] = timestamp
+            self._ripple_msg[0]['elec_grp_id'] = elec_grp_id
+            self._ripple_msg[0]['ripple_type'] = ripple_type
+            self._ripple_msg[0]['is_consensus'] = is_consensus
+            self._ripple_msg[0]['datapoint_zscore'] = datapoint_zscore #NOTE(DS): DS added. This is z-score ripple value
+
+            self.send_interface.send_ripple(
+                self._config['rank']['gui'][0],
+                self._ripple_msg
+            ) 
+        
+
+
 
     def _handle_ripple_end(
         self, timestamp, trode, mean, sigma,

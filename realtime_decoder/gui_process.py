@@ -1,4 +1,3 @@
-
 import time
 import logging
 import numpy as np
@@ -1314,6 +1313,7 @@ class DecodingResultsWindow(QMainWindow):
         self._send_interface = None
         self._command_interface = None
         self._posterior_interface = None
+        self._ripple_interface = None
         self._arm_events_interface = None
         self._rewards_interface = None
         self._dropped_spikes_interface = None
@@ -1358,6 +1358,7 @@ class DecodingResultsWindow(QMainWindow):
         )
 
         self._ok_to_terminate = False
+        self._last_ripple_power = np.nan
 
     def _setup_interfaces(self, comm, rank, config):
         """Set up interfaces used to receive MPI messages"""
@@ -1374,6 +1375,12 @@ class DecodingResultsWindow(QMainWindow):
             comm, rank, config,
             messages.get_dtype("Posterior", config=config),
             messages.MPIMessageTag.POSTERIOR, self
+        )
+
+        self._ripple_interface = GenericGuiRecvInterface(
+            comm, rank, config,
+            messages.get_dtype("Ripples", config=config),
+            messages.MPIMessageTag.RIPPLE_DETECTION, self
         )
 
         self._dropped_spikes_interface = GenericGuiRecvInterface(
@@ -1410,8 +1417,14 @@ class DecodingResultsWindow(QMainWindow):
 
         algorithm = self._config['algorithm']
         state_labels = self._config[algorithm]['state_labels']
+        state_labels.append(' ')
+        state_labels.append('thresh')
+
+        print(f"state_labels: {state_labels}")
         S = len(state_labels)
         self._num_states = S
+        self.ripple_threshold = self._config['ripples']['threshold']['content']
+
         state_colors = self._config['gui']['state_colors']
 
         # plot handles
@@ -1586,14 +1599,15 @@ class DecodingResultsWindow(QMainWindow):
             # create plots/plot properties
             self._plots['state'][ii] = self._graphics_widget.addPlot(
                 2, ii, 1, 1,
-                title=f'State Probability (Rank {dec_rank})',
+                #title=f'State Probability (Rank {dec_rank})',
+                title=f'Ripple power (Rank {dec_rank})',
                 labels={
-                    'left': 'Probability',
+                    'left': 'Ripple power (z-score)',
                     'bottom': 'Time (sec)',
                 }
             )
             self._plots['state'][ii].addLegend(offset=None)
-            self._plots['state'][ii].setRange(yRange=[0, 2])
+            self._plots['state'][ii].setRange(yRange=[-2, 7])
             self._plots['state'][ii].setMenuEnabled(False)
 
             # add plot items
@@ -1613,6 +1627,7 @@ class DecodingResultsWindow(QMainWindow):
 
         self._command_interface.receive()
         self._posterior_interface.receive()
+        self._ripple_interface.receive()
         self._arm_events_interface.receive()
         self._dropped_spikes_interface.receive()
 
@@ -1675,6 +1690,8 @@ class DecodingResultsWindow(QMainWindow):
             self.close()
         elif mpi_status.tag == messages.MPIMessageTag.POSTERIOR:
             self._update_lk_post_data(msg, mpi_status)
+        elif mpi_status.tag == messages.MPIMessageTag.RIPPLE_DETECTION:
+            self._update_ripple_power(msg, mpi_status)
         elif mpi_status.tag == messages.MPIMessageTag.DROPPED_SPIKES:
             self._update_dropped_spikes(msg, mpi_status)
         elif mpi_status.tag == messages.MPIMessageTag.ARM_EVENTS:
@@ -1685,6 +1702,10 @@ class DecodingResultsWindow(QMainWindow):
                 f"from source: {mpi_status.source}, "
                 f" tag: {mpi_status.tag}, ignoring"
             )
+
+    def _update_ripple_power(self,msg,mpi_status):
+        self._last_ripple_power = msg[0]['datapoint_zscore']
+        
 
     def _update_lk_post_data(self, msg, mpi_status):
         """Update plot data for the likelihood and posterior plots"""
@@ -1704,9 +1725,22 @@ class DecodingResultsWindow(QMainWindow):
             msg[0]['posterior'], axis=0
         )
 
+        ''' #NOTE(DS): original state function from Josh and Mike
         self._data['state'][plot_ind][:, ind] = np.nansum(
             msg[0]['posterior'], axis=1
         )
+        '''
+
+        #NOTE(DS): now i want to plot ripple power instead
+
+        self._data['state'][plot_ind][1, :] = -100*np.ones_like(self._data['state'][plot_ind][1, :])   
+        self._data['state'][plot_ind][2, :] = self.ripple_threshold *np.ones_like(self._data['state'][plot_ind][1, :])        
+
+        self._data['state'][plot_ind][0, ind] =  self._last_ripple_power # ripple
+        #self._data['state'][plot_ind][1, ind] =  self._last_ripple_power # ripple
+        self._data['state'][plot_ind][1, ind] =  100
+
+
 
         # update index for next data point to be stored at
         self._data['ind'][plot_ind] = (
