@@ -10,7 +10,7 @@ from typing import List
 
 from realtime_decoder import (
     base, utils, datatypes, messages, binary_record,
-    position
+    position, taskstate
 )
 
 ####################################################################################
@@ -143,48 +143,68 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self, rank, config, send_interface, lfp_interface,
         pos_interface
     ):
+        self._counts_for_saving_ripple = 0 #NOTE(DS): To save ripple data but it might lag so I will save only every 'self._counts_saving_index'th
+        self._counts_saving_index = 3 #NOTE(DS): 0.66*6 = every 4ms -- so 250Hz fs 
+
+        self._config = config
+        ripple_electrodes = config['trode_selection']['ripples']
+        self._num_ripple_electrodes = len(ripple_electrodes)
+
+        electrode_labels = [f'electrode_{electrodes}' for electrodes in range(self._num_ripple_electrodes)]
+        ripple_mean_labels = [f'mean_electrode_{electrodes}' for electrodes in range(self._num_ripple_electrodes)]
+        ripple_std_labels = [f'std_electrode_{electrodes}' for electrodes in range(self._num_ripple_electrodes)]
+        ripple_data_labels = [f'datapoint_electrode_{electrodes}' for electrodes in range(self._num_ripple_electrodes)]
+        ripple_data_zscore_labels = [f'datapoint_zscore_electrode_{electrodes}' for electrodes in range(self._num_ripple_electrodes)]
+
+        lfp_data_labels = [f'datapoint_electrode_{electrodes}' for electrodes in range(self._num_ripple_electrodes)]
+
 
         super().__init__(
             rank=rank,
             rec_ids=[
-                binary_record.RecordIDs.RIPPLE_STATE,
+                binary_record.RecordIDs.RIPPLE_OUTPUT,
                 binary_record.RecordIDs.RIPPLE_DETECTED,
-                binary_record.RecordIDs.RIPPLE_END,
-                binary_record.RecordIDs.RIPPLE_EVENT
+                binary_record.RecordIDs.LFP_OUTPUT,
+                binary_record.RecordIDs.RIPPLE_EVENT,
             ],
             rec_labels=[
                 ['timestamp',
-                'elec_grp_id',
-                'content_rip_threshold',
-                'conditioning_rip_threshold',
-                'thresh_crossed',
-                'lockout',
-                'custom_mean',
-                'custom_std',
-                'lfp_data',
-                'rd',
-                'current_val'],
+                'velocity', 'mapped_pos','raw_x', 'raw_y', 'raw_x2', 'raw_y2', 'x', 'y', 'task_state',
+                'datapoint_raw_consensus',
+                'datapoint_zscored_consensus',
+                'mean_consensus',
+                'std_consensus'] + electrode_labels + ripple_data_labels + ripple_data_zscore_labels + ripple_mean_labels + ripple_std_labels,
+
                 ['t_send_data', 't_recv_data', 't_sys', 'timestamp',
                  'elec_grp_id', 'ripple_type', 'env_mean', 'env_std',
                  'threshold_sigma', 'vel_thresh', 'stats_frozen', 'is_consensus'],
-                ['t_send_data', 't_recv_data', 't_sys', 'timestamp',
-                 'elec_grp_id', 'ripple_type', 'normal_end', 'threshold_sigma',
-                 'stats_frozen', 'is_consensus'],
+
+                # NOTE(DS): This was for binary_record.RecordIDs.RIPPLE_END
+                # ['t_send_data', 't_recv_data', 't_sys', 'timestamp',
+                # 'elec_grp_id', 'ripple_type', 'normal_end', 'threshold_sigma',
+                # 'stats_frozen', 'is_consensus'],
+
+                ['timestamp','velocity', 'mapped_pos','raw_x', 'raw_y', 'raw_x2', 'raw_y2', 'x', 'y', 'task_state'] + electrode_labels + lfp_data_labels,
+
                 ['elec_grp_id', 'timestamp_start', 'timestamp_end',
                 't_send_data_start', 't_recv_data_start', 't_sys_start',
                 't_send_data_end', 't_recv_data_end', 't_sys_end',
                 'ripple_type', 'env_mean', 'env_std', 'threshold_sigma_start',
-                'threshold_sigma_end', 'normal_end', 'stats_frozen', 'is_consensus']
+                'threshold_sigma_end', 'normal_end', 'stats_frozen', 'is_consensus'],
+
             ],
             rec_formats=[
-                'Iidd??ddddd', 'qqqqi10sdddd??',
-                'qqqqi10s?d??', 'iqqqqqqqq10sdddd???'
+                'qdIddddddIdddd' + 'I' * len(ripple_mean_labels) + 'd' * 4 * len(ripple_mean_labels),
+                'qqqqi10sdddd??',
+                'qdIddddddI' + 'I' * len(ripple_mean_labels) + 'd' * len(ripple_mean_labels),
+                #'qqqqi10s?d??', # NOTE(DS): This was for binary_record.RecordIDs.RIPPLE_END
+                'iqqqqqqqq10sdddd???'
             ],
             send_interface=send_interface,
             manager_label='state'
         )
 
-        self._config = config
+        
         self._lfp_interface = lfp_interface
         self._pos_interface = pos_interface
         self._envelope_estimator = EnvelopeEstimator(config)
@@ -195,6 +215,10 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
             yfilter=config['kinematics']['smoothing_filter'],
             speedfilter=config['kinematics']['smoothing_filter'],
         )
+
+        self._task_state = 1
+        self._task_state_handler = taskstate.TaskStateHandler(self._config)
+
 
         self._ripple_msg = np.zeros(
             (1, ), dtype=messages.get_dtype("Ripples")
@@ -216,6 +240,21 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
         self._init_params()
         self._init_timings()
+
+        self._pos_mapper = position.TrodesPositionMapper(
+            config['encoder']['position']['arm_ids'],
+            config['encoder']['position']['arm_coords']
+        )
+
+
+        self._current_pos = 0
+        self._x = 0
+        self._y = 0
+
+        self._raw_x = 0
+        self._raw_y = 0
+        self._raw_x2 = 0
+        self._raw_y2 = 0
 
 
     def handle_message(self, msg, mpi_status):
@@ -299,7 +338,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
 
         # updates stats
-        if not self.p['freeze_stats']:
+        if (not self.p['freeze_stats']) and (self._task_state == 1):
             self._means, self._M2, self._counts = utils.estimate_new_stats(
                 env, self._means, self._M2, self._counts
             )
@@ -309,10 +348,18 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
                 cons_env, self._cons_mean, self._cons_M2, self._cons_count
             )
             self._cons_sigma = np.sqrt(self._cons_M2 / self._cons_count)
+            #print(f"cons_mean: {self._cons_mean}, cons_sigma: {self._cons_sigma}") #DEBUG(DS)
 
 
 
         datapoint_zscore_consensus = (cons_env - self._cons_mean)/self._cons_sigma
+        datapoint_zscore = (env - self._means)/self._sigmas
+        '''
+        print(f"env: {env}")
+        print(f"self.means: {self._means}")
+        print(f"self.sigmas: {self._sigmas}")
+        print(f"datapoint_zscore: {datapoint_zscore}")
+        '''
 
         #NOTE(DS): The problem of this is where it only considers one electrode at a time
         self._send_ripple_message_to_GUI(
@@ -357,7 +404,52 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
         if self._lfp_count % self.p['num_lfp_disp'] == 0:
             self.class_log.debug(f"Received {self._lfp_count} lfp points")
+        
+        self._counts_for_saving_ripple += 1
+        if self._counts_for_saving_ripple % self._counts_saving_index == 0:
+            #print(f"ripple msg_timestamp: {msg_timestamp}") #DEBUG(DS)
+            self.write_record(
+                binary_record.RecordIDs.RIPPLE_OUTPUT,
+                msg_timestamp, #'timestamp',
+                self._current_vel, #'velocity',
+                self._current_pos, #'mapped_pos',
+                self._raw_x, #'raw_x',
+                self._raw_y, #'raw_y',
+                self._raw_x2, #'raw_x2',
+                self._raw_y2, # 'raw_y2',
+                self._x, #'x',
+                self._y, #'y',
+                self._task_state, #'task_state'
+                cons_env, #'datapoint_raw_consensus',
+                datapoint_zscore_consensus, #'datapoint_zscored_consensus',
+                self._cons_mean, # 'mean_consensus',
+                self._cons_sigma, #'std_consensus',
+                *list(self._lockout_sample.keys())[:-1],#'elec_grp_ids', #NOTE(DS): -1 to exclude consensus corresponding -1
+                *env, #'datapoints_raw',
+                *datapoint_zscore, #'datapoints_zscored',
+                *self._means, # 'means_all_electrodes',
+                *self._sigmas,#'stds_all_electrodes',
+            )
 
+            self.write_record(
+                binary_record.RecordIDs.LFP_OUTPUT,
+                msg_timestamp, #'timestamp',
+                self._current_vel, #'velocity',
+                self._current_pos, #'mapped_pos',
+                self._raw_x, #'raw_x',
+                self._raw_y, #'raw_y',
+                self._raw_x2, #'raw_x2',
+                self._raw_y2, # 'raw_y2',
+                self._x, #'x',
+                self._y, #'y',
+                self._task_state, #'task_state'
+                *list(self._lockout_sample.keys())[:-1],#'elec_grp_ids', #NOTE(DS): -1 to exclude consensus corresponding -1
+                *msg_data, #'datapoints_raw',
+            )
+
+
+
+       
     def _process_pos(self, pos_msg):
         """Process a new position data sample"""
 
@@ -370,6 +462,10 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 
         self._pos_timestamp = pos_msg.timestamp
 
+        self._task_state = self._task_state_handler.get_task_state(
+            self._pos_timestamp
+        )
+
         # calculate velocity using the midpoints
         xmid = (pos_msg.x + pos_msg.x2)/2
         ymid = (pos_msg.y + pos_msg.y2)/2
@@ -377,12 +473,24 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         # we don't care about x and y returned by compute_kinematics(),
         # as we are using the position mapper to get the appropriate
         # linear coordinates
-        _, _, self._current_vel = self._kinestimator.compute_kinematics(
+        xv, yv, self._current_vel = self._kinestimator.compute_kinematics(
             xmid, ymid,
             smooth_x=self.p['smooth_x'],
             smooth_y=self.p['smooth_y'],
             smooth_speed=self.p['smooth_speed']
         )
+
+        self._current_pos = self._pos_mapper.map_position(pos_msg)
+
+        self._x = xv / self.p['kinematics_sf']
+        self._y = yv / self.p['kinematics_sf']
+
+        self._raw_x = pos_msg.x
+        self._raw_y = pos_msg.y
+        self._raw_x2 = pos_msg.x2
+        self._raw_y2 = pos_msg.y2
+
+
 
     def _detect_ripple_bounds(
         self, t_send_data, t_recv_data, timestamp,
@@ -724,6 +832,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         self.p['smooth_x'] = self._config['kinematics']['smooth_x']
         self.p['smooth_y'] = self._config['kinematics']['smooth_y']
         self.p['smooth_speed'] = self._config['kinematics']['smooth_speed']
+        self.p['kinematics_sf'] = self._config['kinematics']['scale_factor']
 
         self.p['timings_bufsize'] = self._config['ripples']['timings_bufsize']
         self.p['send_lfp_timestamp'] = (self.rank == self._config['rank']['ripples'][0])

@@ -17,7 +17,7 @@ class RecordIDs(IntEnum):
     """The numeric ID for each record type
     """
 
-    RIPPLE_STATE = 1
+    RIPPLE_OUTPUT = 1
     ENCODER_QUERY = 2
     ENCODER_OUTPUT = 3
     DECODER_OUTPUT = 4
@@ -38,7 +38,8 @@ class RecordIDs(IntEnum):
     STIM_RIPPLE_EVENT = 16
 
     RIPPLE_DETECTED = 20
-    RIPPLE_END = 21
+    LFP_OUTPUT = 21
+    #RIPPLE_END = 21
     RIPPLE_EVENT = 22
 
     TIMING = 100

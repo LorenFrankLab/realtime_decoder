@@ -367,13 +367,13 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
                 binary_record.RecordIDs.OCCUPANCY
             ],
             rec_labels=[
-                ['bin_timestamp_l', 'bin_timestamp_r', 'velocity', 'mapped_pos',
+                ['timestamp','bin_timestamp_l', 'bin_timestamp_r', 'velocity', 'mapped_pos',
                 'raw_x', 'raw_y', 'raw_x2', 'raw_y2', 'x', 'y',
                 'spike_count', 'task_state', 'cred_int_post', 'cred_int_lk',
                 'dec_rank', 'dropped_spikes', 'duplicated_spikes', 'vel_thresh',
                 'frozen_model'] +
                 pos_labels + state_labels,
-                ['bin_timestamp_l', 'bin_timestamp_r', 'mapped_pos', 'spike_count', 'dec_rank',
+                ['timestamp','bin_timestamp_l', 'bin_timestamp_r', 'mapped_pos', 'spike_count', 'dec_rank',
                  'vel_thresh', 'frozen_model'] +
                 likelihood_labels,
                 ['timestamp', 'elec_grp_id', 'real_bin', 'late_bin'],
@@ -383,8 +383,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
                  occupancy_labels
             ],
             rec_formats=[
-                'qqddddddddqqqqqqqd?' + 'd'*len(pos_labels) + 'd'*len(state_labels),
-                'qqdqqd?' + 'd'*len(likelihood_labels),
+                'qqqddddddddqqqqqqqd?' + 'd'*len(pos_labels) + 'd'*len(state_labels),
+                'qqqdqqd?' + 'd'*len(likelihood_labels),
                 'qiii',
                 'qddddddqdddqd?' + 'd'*len(occupancy_labels)
             ],
@@ -905,25 +905,26 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         else:
             state_prob = np.ones(1)
 
+        #print(f"decoder timestamp: {timestamp}") #DEBUG(DS)
+
         # write all records
         self.write_record(
             binary_record.RecordIDs.LIKELIHOOD_OUTPUT,
-            lb, ub, self._current_pos, spikes_in_bin_count,
+            timestamp,lb, ub, self._current_pos, spikes_in_bin_count,
             self.rank, self.p['vel_thresh'], self.p['frozen_model'],
             *likelihood
         )
 
         self.write_record(
             binary_record.RecordIDs.DECODER_OUTPUT,
-            lb, ub, self._current_vel, self._current_pos,
-            self._raw_x, self._raw_y,
-            self._raw_x2, self._raw_y2, self._x, self._y,
-            spikes_in_bin_count, self._task_state,
+            timestamp,lb, ub,
+            self._current_vel, self._current_pos,self._raw_x, self._raw_y,self._raw_x2, self._raw_y2, self._x, self._y, spikes_in_bin_count, self._task_state,
             cred_int_post, cred_int_lk, self.rank,
             self._dropped_spikes, self._duplicate_spikes,
             self.p['vel_thresh'], self.p['frozen_model'],
             *posterior.flatten(), *state_prob
         )
+
 
     def _get_unique(self, spike_times):
         """Given an array of spike times, find out which ones are

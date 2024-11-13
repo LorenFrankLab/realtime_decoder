@@ -98,7 +98,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                  'unique_trodes', 'center_well_dist', 'max_center_well_dist',
                  'standard_ripple', 'cond_ripple', 'content_ripple',
                  'standard_ripple_consensus', 'cond_ripple_consensus',
-                 'content_ripple_consensus'] +
+                 'content_ripple_consensus','num_significant_spikes','num_trodes_with_significant_spikes'] +
                  burst_labels + spike_count_labels + event_spike_count_labels +
                  avg_spike_rate_labels + credible_int_labels + region_labels +
                  base_labels + arm_labels,
@@ -116,7 +116,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                  ripple_ts_labels + is_active_labels
             ],
             rec_formats=[
-                'qq?dddiiidid?qdd??????' +
+                'qq?dddiiidid?qdd??????II' +
                 '?'*len(burst_labels) +
                 'q'*len(spike_count_labels) +
                 'q'*len(event_spike_count_labels) +
@@ -337,6 +337,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                                 self.p_ripples['method'] == 'multichannel'
                             )
                         )
+
+
                         if send_shortcut_message:
                             #self._trodes_client.send_statescript_shortcut_message(22) #NOTE(DS): This has been commented out
                             print(f"ripple scm sent. rtype: {rtype}, elec_grp: {trode}, zscore: {datapoint_zscore}")
@@ -393,6 +395,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                         self.p_ripples['method'] == 'consensus'
                     )
                 )
+
+
 
                 if send_shortcut_message:
                     self._trodes_client.send_statescript_shortcut_message(22)
@@ -880,8 +884,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             print(self._enc_ci_buff)
             print(f"Replay arm {arm} detected with more than min unique trodes in ts {self._task_state}")
 
-        print(f"num spikes : {num_spikes_in_event}, {trodes_of_spike}")
-        print(f"Unique trodes: {num_unique}, {np.unique(trodes_of_spike)}")
+        print(f"num spikes(TS{self._task_state}) : {num_spikes_in_event}, {trodes_of_spike}")
+        print(f"Unique trodes(TS{self._task_state}): {num_unique}, {np.unique(trodes_of_spike)}")
 
         if num_unique >= self.p_replay['min_unique_trodes']:
             send_shortcut = self._check_send_shortcut(
@@ -923,6 +927,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 self._is_in_consensus_ripple['standard'],
                 self._is_in_consensus_ripple['cond'],
                 self._is_in_consensus_ripple['content'], 
+                num_spikes_in_event,
+                num_unique,
                 *self._in_burst, *self._spike_count,
                 *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
                 *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
