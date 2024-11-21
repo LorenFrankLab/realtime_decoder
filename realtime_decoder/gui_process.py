@@ -1730,16 +1730,14 @@ class DecodingResultsWindow(QMainWindow):
             msg[0]['posterior'], axis=1
         )
         '''
-
         #NOTE(DS): now i want to plot ripple power instead
 
-        self._data['state'][plot_ind][1, :] = -100*np.ones_like(self._data['state'][plot_ind][1, :])   
-        self._data['state'][plot_ind][2, :] = self.ripple_threshold *np.ones_like(self._data['state'][plot_ind][1, :])        
+        self._data['state'][plot_ind][1, :] = -100*np.ones_like(self._data['state'][plot_ind][1, :])   #NOTE(DS): current time
+        self._data['state'][plot_ind][2, ind] = self.ripple_threshold      
 
         self._data['state'][plot_ind][0, ind] =  self._last_ripple_power # ripple
         #self._data['state'][plot_ind][1, ind] =  self._last_ripple_power # ripple
         self._data['state'][plot_ind][1, ind] =  100
-
 
 
         # update index for next data point to be stored at
@@ -1762,11 +1760,21 @@ class DecodingResultsWindow(QMainWindow):
     def _update_arm_events(self, msg, mpi_status):
         """Update data keeping track of events detected
         at different arms"""
-
+        
         for ii, num_events in enumerate(msg):
+            if num_events != self._sbdata['arm_events'][ii]:
+                arm_event = ii
             self._sbdata['arm_events'][ii] = num_events
         self._sbdata['rewards_delivered'] = np.sum(msg)
         self._update_status_bar()
+
+
+        #NOTE(DS): To plot the event trigger, use interval in linear position and make it to 1
+        plot_ind = 0 # NOTE(DS): hardcoded but means the leftmost plot in the gui
+        ind = self._data['ind'][plot_ind]
+        self._data['state'][plot_ind][2, :ind] = self._data['state'][plot_ind][2, :ind] + arm_event 
+
+
 
     def _update_status_bar(self):
         """Update the status bar"""
