@@ -830,7 +830,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
                 self._spike_buf[spikes_in_bin_mask]
             )
 
-            unique_inds = self._get_unique(spikes_before[:, 0])
+            unique_inds = self._get_unique(spikes_before[:, 0]) #NOTE(DS): to get rid of duplicated spikes
             spikes_after = np.atleast_2d(
                 spikes_before[unique_inds]
             )
@@ -935,7 +935,8 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
             spike_times, return_index=True, return_counts=True
         )
         unique_inds = np.atleast_1d(
-            inds[np.argwhere(counts == 1).squeeze()]
+#            inds[np.argwhere(counts == 1).squeeze()] #NOTE(DS): original code from Josh & Mike
+            inds[np.argwhere(counts < 3).squeeze()] #NOTE(DS): To test whether duplicated spikes are by chance; originally 
         )
         return unique_inds
 
