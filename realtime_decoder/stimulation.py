@@ -184,6 +184,10 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._init_stim_params()
         self._init_params()
 
+        #NOTE(DS): I am using this as a starting spatial bin for target location
+        self._well_angle_range = self._config['stimulation']['head_direction']['well_angle_range']
+        self._within_angle_range = self._config['stimulation']['head_direction']['within_angle_range']
+
     def handle_message(self, msg, mpi_status):
         """Process a (non neural data) received MPI message"""
 
@@ -227,6 +231,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p_replay['enabled'] = gui_msg.replay_stim_enabled
         self.p_ripples['enabled'] = gui_msg.ripple_stim_enabled
         self.p_head['enabled'] = gui_msg.head_direction_stim_enabled
+
+        #NOTE(DS): I am using this as a starting spatial bin for target location
+        self._well_angle_range = gui_msg.well_angle_range
+        self._within_angle_range = gui_msg.within_angle_range
+
+
 
     def _update_ripples(self, msg):
         """Update current ripple state"""
@@ -754,10 +764,19 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         # Nevertheless it might be useful to eventually make
         # this configurable if the position bin size changes,
         # for example
-        ps_arm1 = prob[20:25].sum()
-        ps_arm2 = prob[36:41].sum()
+
+        arm1_start_bin = 25 - int(self._well_angle_range)
+        arm2_start_bin = 41 - int(self._within_angle_range)
+
+        #print(f"arm1_start_bin: {arm1_start_bin}")
+        #print(f"arm2_start_bin: {arm2_start_bin}")
+
+
+        ps_arm1 = prob[arm1_start_bin:25].sum() #NOTE(DS): originally, 20-25
+        ps_arm2 = prob[arm2_start_bin:41].sum() #NOTE(DS): originally, 36-41
         ps_arm1_base = prob[13:18].sum()
         ps_arm2_base = prob[29:34].sum()
+
             
         return ps_arm1, ps_arm2, ps_arm1_base, ps_arm2_base
 
