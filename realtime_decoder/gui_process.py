@@ -286,7 +286,7 @@ class TabbedDialog(QDialog):
         """Set up widgets and data related to posterior
         threshold (see documentation for more info)"""
 
-        self._post_label = QLabel(self.tr("Posterior threshold"))
+        self._post_label = QLabel(self.tr("arm 1 event posterior threshold"))
         self._post_label.setToolTip("Just a helpful tool tip")
         layout.addWidget(self._post_label, 3, 0)
 
@@ -343,7 +343,7 @@ class TabbedDialog(QDialog):
         """Set up widgets and data related to the minimum amount of time
         needed to qualify as a head direction event"""
 
-        self._min_duration_label = QLabel(self.tr("Min duration head angle"))
+        self._min_duration_label = QLabel(self.tr("arm 2 event posterior threshold"))
         layout.addWidget(self._min_duration_label, 6, 0)
 
         self._min_duration_edit = QLineEdit()
@@ -354,7 +354,7 @@ class TabbedDialog(QDialog):
         layout.addWidget(self._min_duration_button, 6, 2)
 
         value = float(
-            self._config['stimulation']['head_direction']['min_duration']
+            self._config['stimulation']['replay']['secondary_arm_threshold']
         )
         self._min_duration_edit.setText(str(value))
         self._main_params.min_duration = value
@@ -363,7 +363,7 @@ class TabbedDialog(QDialog):
         """Set up widgets and data related to the well angle range
         (see documentation)"""
 
-        self._well_angle_range_label = QLabel(self.tr("Well angle range"))
+        self._well_angle_range_label = QLabel(self.tr("arm 1 num target spatial bins"))
         layout.addWidget(self._well_angle_range_label, 7, 0)
 
         self._well_angle_range_edit = QLineEdit()
@@ -383,7 +383,7 @@ class TabbedDialog(QDialog):
         """Set up widgets and data related to the within angle range
         (see documentation)"""
 
-        self._within_angle_range_label = QLabel(self.tr("Within angle range"))
+        self._within_angle_range_label = QLabel(self.tr("arm 2 num target spatial bins"))
         layout.addWidget(self._within_angle_range_label, 8, 0)
 
         self._within_angle_range_edit = QLineEdit()
@@ -1732,12 +1732,12 @@ class DecodingResultsWindow(QMainWindow):
         '''
         #NOTE(DS): now i want to plot ripple power instead
 
-        self._data['state'][plot_ind][1, :] = -100*np.ones_like(self._data['state'][plot_ind][1, :])   #NOTE(DS): current time
+        self._data['state'][plot_ind][1, :] = -3*np.ones_like(self._data['state'][plot_ind][1, :])   #NOTE(DS): current time
         self._data['state'][plot_ind][2, ind] = self.ripple_threshold      
 
         self._data['state'][plot_ind][0, ind] =  self._last_ripple_power # ripple
         #self._data['state'][plot_ind][1, ind] =  self._last_ripple_power # ripple
-        self._data['state'][plot_ind][1, ind] =  100
+        self._data['state'][plot_ind][1, ind] =  8
 
 
         # update index for next data point to be stored at
