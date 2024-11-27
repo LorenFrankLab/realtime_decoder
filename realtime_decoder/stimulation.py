@@ -93,7 +93,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             rec_labels=[
                 ['bin_timestamp_l', 'bin_timestamp_r', 'shortcut_message_sent',
                  'delay', 'velocity', 'mapped_pos', 'task_state',
-                 'posterior_max_arm', 'target_arm', 'content_threshold',
+                 'posterior_max_arm', 'target_arm', 'arm1_threshold','arm2_threshold',
                  'max_arm_repeats', 'replay_window_time', 'is_instructive',
                  'unique_trodes', 'center_well_dist', 'max_center_well_dist',
                  'standard_ripple', 'cond_ripple', 'content_ripple',
@@ -116,7 +116,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                  ripple_ts_labels + is_active_labels
             ],
             rec_formats=[
-                'qq?dddiiidid?qdd??????II' +
+                'qq?dddiiiddid?qdd??????II' +
                 '?'*len(burst_labels) +
                 'q'*len(spike_count_labels) +
                 'q'*len(event_spike_count_labels) +
@@ -235,7 +235,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         #NOTE(DS): I am using this as a starting spatial bin for target location
         self._well_angle_range = gui_msg.well_angle_range
         self._within_angle_range = gui_msg.within_angle_range
-
+        self.p_replay['secondary_arm_threshold'] = gui_msg.min_duration
 
 
     def _update_ripples(self, msg):
@@ -764,19 +764,28 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         # Nevertheless it might be useful to eventually make
         # this configurable if the position bin size changes,
         # for example
-
+        #NOTE(DS): this is with 41 bins -- original
         arm1_start_bin = 25 - int(self._well_angle_range)
         arm2_start_bin = 41 - int(self._within_angle_range)
 
-        #print(f"arm1_start_bin: {arm1_start_bin}")
-        #print(f"arm2_start_bin: {arm2_start_bin}")
-
-
         ps_arm1 = prob[arm1_start_bin:25].sum() #NOTE(DS): originally, 20-25
         ps_arm2 = prob[arm2_start_bin:41].sum() #NOTE(DS): originally, 36-41
-        ps_arm1_base = prob[13:18].sum()
-        ps_arm2_base = prob[29:34].sum()
+        ps_arm1_base = prob[13:arm1_start_bin].sum()
+        ps_arm2_base = prob[29:arm2_start_bin].sum()
 
+        ''' 
+        #NOTE(DS): This is with 21 bins -- modified
+        arm1_end_bin = 13
+        arm2_end_bin = 21
+        arm1_target_start_bin = arm1_end_bin - int(self._well_angle_range)
+        arm2_target_start_bin = arm2_end_bin - int(self._within_angle_range)
+
+
+        ps_arm1 = prob[arm1_target_start_bin:arm1_end_bin].sum() #NOTE(DS): originally, 20-25
+        ps_arm2 = prob[arm2_target_start_bin:arm2_end_bin].sum() #NOTE(DS): originally, 36-41
+        ps_arm1_base = prob[7:arm1_target_start_bin].sum()
+        ps_arm2_base = prob[15:arm2_target_start_bin].sum()
+        '''
             
         return ps_arm1, ps_arm2, ps_arm1_base, ps_arm2_base
 
@@ -859,32 +868,50 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         else:
 
-            arm_thresh = self.p_replay['primary_arm_threshold']
+
+            #NOTE(DS): I want to write down for all possible event that goes beyond 0.3 but only trigger SCM if higher than thresholds
+            arm1_thresh = 0.25
+            arm2_thresh = 0.25
             other_arm_thresh = self.p_replay['other_arm_threshold']
 
             #NOTE(DS): changed the code so that the target arm is at the tip of the arms
-            avg_arm_ps = np.mean(self._region_ps_buff[ind],axis = 0) #NOTE(DS): target arm + whole center
-            #avg_arm_ps = np.mean(self._arm_ps_buff[ind], axis=0) # NOTE(DS): the whole arm
+            avg_target_arm_ps = np.mean(self._region_ps_buff[ind],axis = 0) #NOTE(DS): target arm + whole center
+            avg_arm_ps = np.mean(self._arm_ps_buff[ind], axis=0) # NOTE(DS): the whole arm
 
             # arm 1 candidate event
             if (
-                avg_arm_ps[1] > arm_thresh and
+                avg_target_arm_ps[1] > arm1_thresh and
                 np.all(avg_arm_ps[[0, 2]] < other_arm_thresh)
             ):
                 self._handle_replay(1, msg)
 
             # arm 2 candidate event
             elif (
-                avg_arm_ps[2] > arm_thresh and
+                avg_target_arm_ps[2] > arm2_thresh and
                 np.all(avg_arm_ps[[0, 1]] < other_arm_thresh)
             ):
                 self._handle_replay(2, msg)
 
     def _handle_replay(self, arm, msg):
         """Handle a replay event for a non-instructive task"""
+        above_threshold = False
+        target_posterior_prob = None
 
         # assumes already satisfied event lockout and minimum unique
         # trodes criteria. all these events should therefore be recorded
+        arm1_thresh = self.p_replay['primary_arm_threshold']
+        arm2_thresh = self.p_replay['secondary_arm_threshold']
+        arm_thresh = None
+        ind = self._dec_ind
+        avg_target_arm_ps = np.mean(self._region_ps_buff[ind],axis = 0) #NOTE(DS): target arm + whole center
+        if arm == 1:
+            above_threshold = avg_target_arm_ps[1] >= arm1_thresh 
+            target_posterior_prob = np.round(avg_target_arm_ps[1],3)
+            arm_thresh = arm1_thresh
+        elif arm == 2:
+            above_threshold = avg_target_arm_ps[2] >= arm2_thresh
+            target_posterior_prob = np.round(avg_target_arm_ps[2],3)
+            arm_thresh = arm2_thresh
 
         self._replay_event_ts = msg[0]['bin_timestamp_r']
 
@@ -892,24 +919,29 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         num_unique = np.count_nonzero(np.unique(self._enc_ci_buff))
 
         trodes_of_spike = self._enc_ci_buff[self._enc_ci_buff != 0]
-
+        #avg_arm_ps = np.mean(self._region_ps_buff[ind],axis = 0) #NOTE(DS): target arm + whole center
 
         if num_unique < self.p_replay['min_unique_trodes']:
             print(f"Replay arm {arm} detected less than min unique trodes in ts {self._task_state}")
-        if num_unique > 1: 
+        elif above_threshold == False:
+            print(f"Replay arm {arm} detected with lower target posterior prob: {target_posterior_prob} than threshold: {arm_thresh}")
+        elif num_unique >= self.p_replay['min_unique_trodes']: 
             print(f" ")
             print(f" ")
             print(f"+++++++++++++++++++++++++++++++")
             print(self._enc_ci_buff)
             print(f"Replay arm {arm} detected with more than min unique trodes in ts {self._task_state}")
+            print(f"Replay arm {arm} detected with target posterior prob: {target_posterior_prob} with threshold: {arm_thresh}")
 
         print(f"num spikes(TS{self._task_state}) : {num_spikes_in_event}, {trodes_of_spike}")
         print(f"Unique trodes(TS{self._task_state}): {num_unique}, {np.unique(trodes_of_spike)}")
 
+        send_shortcut = self._check_send_shortcut(
+            self.p_replay['enabled']
+        ) and above_threshold
+
         if num_unique >= self.p_replay['min_unique_trodes']:
-            send_shortcut = self._check_send_shortcut(
-                self.p_replay['enabled']
-            )
+
 
             if send_shortcut:
                 if arm == 1:
@@ -925,36 +957,36 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 else: 
                     print('ERROR: Replay arms are not 1 or 2. see stimulation.py') 
                 print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}")
-
+                #print(f"avg arm representation: {avg_arm_ps}")
                 print(f"---------------------------------")
                 print(f" ")
                 print(f" ")
 
 
-            self.write_record(
-                binary_record.RecordIDs.STIM_MESSAGE,
-                msg[0]['bin_timestamp_l'], msg[0]['bin_timestamp_r'],
-                send_shortcut, self._delay, self._current_vel, self._current_pos,
-                self._task_state, arm, self.p_replay['target_arm'],
-                self.p_replay['primary_arm_threshold'], self._max_repeats,
-                self._replay_window_time, self.p['instructive'],
-                num_unique, self._center_well_dist,
-                self.p['max_center_well_dist'],
-                self._is_in_multichannel_ripple['standard'],
-                self._is_in_multichannel_ripple['cond'],
-                self._is_in_multichannel_ripple['content'],
-                self._is_in_consensus_ripple['standard'],
-                self._is_in_consensus_ripple['cond'],
-                self._is_in_consensus_ripple['content'], 
-                num_spikes_in_event,
-                num_unique,
-                *self._in_burst, *self._spike_count,
-                *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
-                *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
-                *self._region_ps_buff.mean(axis=1).flatten(),
-                *self._region_ps_base_buff.mean(axis=1).flatten(),
-                *self._arm_ps_buff.mean(axis=1).flatten()
-            )
+        self.write_record(
+            binary_record.RecordIDs.STIM_MESSAGE,
+            msg[0]['bin_timestamp_l'], msg[0]['bin_timestamp_r'],
+            send_shortcut, self._delay, self._current_vel, self._current_pos,
+            self._task_state, arm, self.p_replay['target_arm'],
+            self.p_replay['primary_arm_threshold'], self.p_replay['secondary_arm_threshold'], self._max_repeats,
+            self._replay_window_time, self.p['instructive'],
+            num_unique, self._center_well_dist,
+            self.p['max_center_well_dist'],
+            self._is_in_multichannel_ripple['standard'],
+            self._is_in_multichannel_ripple['cond'],
+            self._is_in_multichannel_ripple['content'],
+            self._is_in_consensus_ripple['standard'],
+            self._is_in_consensus_ripple['cond'],
+            self._is_in_consensus_ripple['content'], 
+            num_spikes_in_event,
+            num_unique,
+            *self._in_burst, *self._spike_count,
+            *self._event_spike_count.sum(axis=1), *self._bin_fr_means,
+            *self._enc_ci_buff.mean(axis=-1).mean(axis=-1),
+            *self._region_ps_buff.mean(axis=1).flatten(),
+            *self._region_ps_base_buff.mean(axis=1).flatten(),
+            *self._arm_ps_buff.mean(axis=1).flatten()
+        )
 
     def _find_replay_instructive(self, msg):
         """Look for a potential replay event for an instructive task"""
