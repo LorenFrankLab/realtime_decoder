@@ -117,6 +117,8 @@ class Encoder(base.LoggingClass):
                 self._occupancy_ct = f['occupancy_ct'][0]
             self.class_log.info(f"Loaded encoding model from {files[0]}")
 
+        self._temp_idx = 0 
+
     def _init_params(self):
         """Initialize parameters used for the encoding model"""
 
@@ -130,8 +132,25 @@ class Encoder(base.LoggingClass):
         self.p['num_occupancy_points'] = self._config['display']['encoder']['occupancy']
 
     def add_new_mark(self, mark):
-
+        '''
         # this is where the mark_size increases over time 
+        self._marks[self._mark_idx%self._marks.shape[0]] = mark
+        self._positions[self._mark_idx%self._marks.shape[0]] = self._position
+        self._mark_idx += 1
+        '''
+        
+        # NOTE(DS): Having only the most recent spikes bias the encoding 
+        if self._mark_idx < self._marks.shape[0]:
+            self._marks[self._mark_idx%self._marks.shape[0]] = mark
+            self._positions[self._mark_idx%self._marks.shape[0]] = self._position
+            self._mark_idx += 1
+        else:
+            if self._mark_idx%2 == 0:
+                self._marks[self._mark_idx%self._marks.shape[0]] = mark
+                self._positions[self._mark_idx%self._marks.shape[0]] = self._position
+            self._mark_idx += 3
+
+        '''
         if self._mark_idx < self._marks.shape[0]:
             self._marks[self._mark_idx] = mark
             self._positions[self._mark_idx] = self._position
@@ -145,17 +164,20 @@ class Encoder(base.LoggingClass):
                 self.class_log.info(
                 f"mark buffer is full. substitutes every other markvec {self._temp_idx/2}"
                 )
+        '''
 
-            ''' # NOTE(DS): This make buf_size meaningless
-            self._marks = np.vstack((
-                self._marks,
-                np.zeros_like(self._marks)
-            ))
-            self._positions = np.hstack((
-                self._positions,
-                np.zeros_like(self._positions)
-            ))
-            '''
+        ''' # NOTE(DS): This make buf_size meaningless
+        self._marks = np.vstack((
+            self._marks,
+            np.zeros_like(self._marks)
+        ))
+        self._positions = np.hstack((
+            self._positions,
+            np.zeros_like(self._positions)
+        ))
+        '''
+
+
 
 
 
@@ -168,17 +190,23 @@ class Encoder(base.LoggingClass):
         if self._mark_idx == 0:
             return None
 
+        if self._mark_idx >= self._marks.shape[0]:
+            mark_idx = self._marks.shape[0]
+        else:
+            mark_idx = self._mark_idx
+
+
         #print(mark)
 
-        in_range = np.ones(self._mark_idx, dtype=bool)
+        in_range = np.ones(mark_idx, dtype=bool)
         if self.p['use_filter']:
             std = self.p['filter_std']
             n_std = self.p['filter_n_std']
             for ii in range(self._marks.shape[1]):
                 in_range = np.logical_and(
                     np.logical_and(
-                        self._marks[:self._mark_idx, ii] > mark[ii] - n_std * std,
-                        self._marks[:self._mark_idx, ii] < mark[ii] + n_std * std
+                        self._marks[:mark_idx, ii] > mark[ii] - n_std * std,
+                        self._marks[:mark_idx, ii] < mark[ii] + n_std * std
                     ),
                     in_range
                 )
@@ -189,11 +217,11 @@ class Encoder(base.LoggingClass):
 
         # evaluate Gaussian kernel on distance in mark space
         squared_distance = np.sum(
-            np.square(self._marks[:self._mark_idx] - mark),
+            np.square(self._marks[:mark_idx] - mark),
             axis=1
         )
         weights = self._k1 * np.exp(squared_distance * self._k2)
-        positions = self._positions[:self._mark_idx]
+        positions = self._positions[:mark_idx]
 
         # print(positions.shape)
         # print("")
@@ -523,6 +551,10 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             # or not
             if encoding_spike:
                 self._encoders[elec_grp_id].add_new_mark(mark_vec)
+                if self._encoders[elec_grp_id]._mark_idx%1000 == 0:
+                    self.class_log.info(
+                        f"num spikes in {elec_grp_id} is {self._encoders[elec_grp_id]._mark_idx}"
+                        )
                 self._spk_counters[elec_grp_id]['encoding'] += 1
                 if self._spk_counters[elec_grp_id]['encoding'] % self.p['num_encoding_disp'] == 0:
                     self.class_log.info(
