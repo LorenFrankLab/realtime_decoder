@@ -92,8 +92,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             ],
             rec_labels=[
                 ['bin_timestamp_l', 'bin_timestamp_r', 'shortcut_message_sent',
-                 'delay', 'velocity', 'mapped_pos', 'task_state',
-                 'posterior_max_arm', 'target_arm', 'arm1_threshold','arm2_threshold',
+                 'delay', 'velocity', 'mapped_pos', 
+                 'raw_x', 'raw_y', 'raw_x2', 'raw_y2', 'angle',
+                 'task_state','posterior_max_arm', 'target_arm', 'arm1_threshold','arm2_threshold',
                  'max_arm_repeats', 'replay_window_time', 'is_instructive',
                  'unique_trodes', 'center_well_dist', 'max_center_well_dist',
                  'standard_ripple', 'cond_ripple', 'content_ripple',
@@ -116,7 +117,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                  ripple_ts_labels + is_active_labels
             ],
             rec_formats=[
-                'qq?dddiiiddid?qdd??????II' +
+                'qq?ddddddddiiiddid?qdd??????II' +
                 '?'*len(burst_labels) +
                 'q'*len(spike_count_labels) +
                 'q'*len(event_spike_count_labels) +
@@ -187,6 +188,14 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         #NOTE(DS): I am using this as a starting spatial bin for target location
         self._well_angle_range = self._config['stimulation']['head_direction']['well_angle_range']
         self._within_angle_range = self._config['stimulation']['head_direction']['within_angle_range']
+
+        self._automatic_threshold_update = self._config['stimulation']['automatic_threshold_update']
+        self._num_scm_each_arm_per_minute = self._config['stimulation']['num_each_arm_per_minute']
+        self._arm_1_posterior = [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.26,0.27] #NOTE(DS): in case the buffer is too small
+        self._arm_2_posterior = [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.26,0.27]
+        self._task_state_2_start_time = None
+        self._timepoints_per_sec = self._config['sampling_rate']['spikes']
+
 
     def handle_message(self, msg, mpi_status):
         """Process a (non neural data) received MPI message"""
@@ -477,6 +486,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         x = (msg[0]['raw_x'] + msg[0]['raw_x2'])/2
         y = (msg[0]['raw_y'] + msg[0]['raw_y2'])/2
+
+        self._raw_x = msg[0]['raw_x']
+        self._raw_y = msg[0]['raw_y']
+        self._raw_x2 = msg[0]['raw_x2']
+        self._raw_y2 = msg[0]['raw_y2']
+
         self._center_well_dist = np.sqrt(
             (x - self._center_well_loc[0])**2 + (y - self._center_well_loc[1])**2
         ) * self.p['scale_factor']
@@ -923,15 +938,24 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         if num_unique < self.p_replay['min_unique_trodes']:
             print(f"Replay arm {arm} detected less than min unique trodes in ts {self._task_state}")
-        elif above_threshold == False:
-            print(f"Replay arm {arm} detected with lower target posterior prob: {target_posterior_prob} than threshold: {arm_thresh}")
-        elif num_unique >= self.p_replay['min_unique_trodes']: 
-            print(f" ")
-            print(f" ")
-            print(f"+++++++++++++++++++++++++++++++")
-            print(self._enc_ci_buff)
-            print(f"Replay arm {arm} detected with more than min unique trodes in ts {self._task_state}")
-            print(f"Replay arm {arm} detected with target posterior prob: {target_posterior_prob} with threshold: {arm_thresh}")
+        else:
+            if above_threshold == False:
+                print(f"Replay arm {arm} detected with lower target posterior prob: {target_posterior_prob} than threshold: {arm_thresh}")
+            else: 
+                print(f" ")
+                print(f" ")
+                print(f"+++++++++++++++++++++++++++++++")
+                print(self._enc_ci_buff)
+                print(f"Replay arm {arm} detected with more than min unique trodes in ts {self._task_state}")
+                print(f"Replay arm {arm} detected with target posterior prob: {target_posterior_prob} with threshold: {arm_thresh}")
+
+            if self._task_state == 2:
+                #NOTE(DS): To compute the threshold that matches the expected scm per minutes
+                if arm == 1:
+                    self._arm_1_posterior.append(target_posterior_prob)
+                elif arm == 2:
+                    self._arm_2_posterior.append(target_posterior_prob)
+
 
         print(f"num spikes(TS{self._task_state}) : {num_spikes_in_event}, {trodes_of_spike}")
         print(f"Unique trodes(TS{self._task_state}): {num_unique}, {np.unique(trodes_of_spike)}")
@@ -962,11 +986,30 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 print(f" ")
                 print(f" ")
 
+                if (np.sum(self._num_rewards[1:]) in [5,10,20,40]) and self._automatic_threshold_update:
+
+                    curent_time  =  msg[0]['bin_timestamp_l']
+                    elapsed_minutes = (curent_time - self._task_state_2_start_time)/self._timepoints_per_sec/60 #minutes
+
+                    desired_number_of_scm = np.ceil(self._num_scm_each_arm_per_minute * elapsed_minutes)
+                    index_for_desired_number_of_scm = -int(desired_number_of_scm + 1)
+
+                    self.p_replay['primary_arm_threshold'] = np.sort(self._arm_1_posterior)[index_for_desired_number_of_scm]
+                    self.p_replay['secondary_arm_threshold'] = np.sort(self._arm_2_posterior)[index_for_desired_number_of_scm]
+
+                    print(f"new arm 1 thresh: {self.p_replay['primary_arm_threshold']} and arm 2 thresh: {self.p_replay['secondary_arm_threshold']}")
+
+        # NOTE(DS): This computes the threshold to match the scm rate
+        if self._task_state == 2 and self._task_state_2_start_time == None:
+            self._task_state_2_start_time = msg[0]['bin_timestamp_l']
+
+
 
         self.write_record(
             binary_record.RecordIDs.STIM_MESSAGE,
             msg[0]['bin_timestamp_l'], msg[0]['bin_timestamp_r'],
             send_shortcut, self._delay, self._current_vel, self._current_pos,
+            self._raw_x, self._raw_y, self._raw_x2,self._raw_y2,self._head_angle,
             self._task_state, arm, self.p_replay['target_arm'],
             self.p_replay['primary_arm_threshold'], self.p_replay['secondary_arm_threshold'], self._max_repeats,
             self._replay_window_time, self.p['instructive'],
@@ -987,6 +1030,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             *self._region_ps_base_buff.mean(axis=1).flatten(),
             *self._arm_ps_buff.mean(axis=1).flatten()
         )
+
+
+        
 
     def _find_replay_instructive(self, msg):
         """Look for a potential replay event for an instructive task"""
@@ -1168,6 +1214,11 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._well_1_y = well_loc[0][1]
         self._well_2_x = well_loc[1][0]
         self._well_2_y = well_loc[1][1]
+
+        self._raw_x = 0
+        self._raw_y = 0
+        self._raw_x2 = 0
+        self._raw_y2 = 0
 
     def _init_data_buffers(self):
         """Initialize data objects"""

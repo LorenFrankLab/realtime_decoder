@@ -1,0 +1,196 @@
+---
+rank:
+  supervisor: [0]
+  ripples: [3]
+  decoders: [1]
+  encoders: [
+    4,5,6,7,8,9,10,11,12
+  ]
+  gui: [2]
+rank_settings:
+  enable_rec: [
+    0,1,3,4,5,6,7,8,9,10,11,12
+  ]
+trode_selection:
+  ripples: [10,13,16,18,21,23,26,29,32]
+  decoding: [
+    10,13,16,18,21,23,26,29,32
+  ]
+
+decoder_assignment:
+  # key is the decoder rank. the list consists of
+  # the decoding trodes
+  1: [
+    10,13,16,18,21,23,26,29,32
+  ]
+algorithm: "clusterless_decoder"
+datasource: "trodes"
+num_setup_messages: 100
+preloaded_model: false
+frozen_model: false
+files:
+  output_dir: '/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/josh_decoder_output'
+  #backup_dir : 'data/decoder-output-backup' # optional
+  saved_model_dir: '/media/lorenlab/84fc44d3-77e1-4289-a1bc-dc9525326ee9/josh_decoder_output' # only used if using a pre-loaded model
+  #saved_model_prefix: '20241119_14473'
+  saved_model_prefix: ' 20241124_093013'
+  prefix: 'SC85_realtime_decoding'
+  rec_postfix: 'bin_rec'
+  timing_postfix: 'timing'
+trodes:
+  config_file: '/home/lorenlab/trodes_configs/SC85_v3.trodesconf'
+  # taskstate_file and instructive_file are optional,
+  # but not necessarily for a custom stim decider
+  taskstate_file: '/home/lorenlab/realtime_decoder/config/taskstate.txt'
+  instructive_file: '/home/lorenlab/spykshrk_realtime/config/instructive_new_arm.txt'
+  voltage_scaling_factor: 0.195
+sampling_rate:
+  spikes: 30000
+  lfp: 1500
+  position: 30
+ripples:
+  max_ripple_samples: 450
+  vel_thresh: 10
+  freeze_stats: false
+  timings_bufsize: 1000000
+  filter:
+    type: 'iir'
+    order: 2
+    crit_freqs: [150, 250]
+    kwargs:
+      btype: 'bandpass'
+      ftype: 'butter'
+    # type: 'fir'
+    # num_taps: 21
+    # band_edges: [140, 150, 250, 260]
+    # desired: [0, 1, 1, 0]
+  smoothing_filter:
+    num_taps: 15
+    band_edges: [50, 55]
+    desired: [1, 0]
+  threshold: # units: number of standard deviations above the mean
+    standard: 3.5
+    conditioning: 3.75
+    content: 4
+    end: 0
+  # custom_mean:
+  #   1: 1
+  #   consensus: 2
+  # custom_std:
+  #   1: 2
+  #   consensus: 3
+encoder:
+  spk_amp: 60 # NOTE(DS): control with trodes threshold
+  use_channel_dist_from_max_amp: 2 
+  mark_dim: 8
+  bufsize: 18001
+  timings_bufsize: 18001
+  vel_thresh: 10
+  num_pos_points: 150
+  position: # SC66 specific
+    lower: 0
+    upper: 41
+    num_bins: 41
+    arm_ids: [0,1,2]
+    arm_coords: [[0,8],[13,24],[29,40]]
+  mark_kernel:
+    mean: 0
+    std: 20
+    use_filter: true  # fred specific
+    n_std: 1
+    n_marks_min: 10
+  dead_channels: {
+      52: [8]
+      }
+decoder:
+  decoder_to_message: 1 # 1: decoder 1, 2: decoder 2, 0: all decoders
+  bufsize: 2000
+  timings_bufsize: 50000
+  cred_int_bufsize: 10
+  starting_arm1_bin: 20
+  starting_arm2_bin: 36
+  num_pos_points: 150
+  time_bin:
+    samples: 180 # reference sampling rate is spike sampling rate
+    delay_samples: 180 # reference sampling rate is spike sampling rate
+clusterless_decoder:
+  state_labels: ['state']
+  transmat_bias: 1
+gui:
+  colormap: 'rocket'
+  send_interval: 0 # seconds. Automates parameter sending. Set to <= 0 to disable
+  refresh_rate: 25 # Hz
+  trace_length: 2 # seconds
+  state_colors: ['#4c72b0','#dd8452', '#55a868']
+  num_xticks: 5
+mua:
+  threshold:
+    trigger: 4
+    end: 0
+  freeze_stats: false
+  moving_avg_window: 5
+  # custom_mean:
+  #   1: 700
+  # custom_std:
+  #   1: 300
+stimulation:
+  instructive: false
+  shortcut_msg_on: true
+  automatic_threshold_update : true
+  num_each_arm_per_minute: 1.1
+  num_pos_points: 150
+  center_well_loc: [768,449] # camera coordinates for SC66
+  max_center_well_dist: 17
+  replay:
+    enabled: true
+    method: "posterior"
+    target_arm: 1 #this does not need to be used
+    event_lockout: 0.2 # Minimum number of time imposed between successive candidate replay events. Units are in seconds.
+    sliding_window: 5 # number of decoder time bins 6ms * 5?
+    primary_arm_threshold: 0.4
+    secondary_arm_threshold: 0.4
+    other_arm_threshold: 0.3 # the value DS used for SC66
+    max_arm_repeats: 8 # not currently used
+    instr_max_repeats: 3
+    min_unique_trodes: 2
+  ripples:
+    enabled: true
+    type: "standard"
+    method: "multichannel"
+    event_lockout: 0
+    num_above_thresh: 1
+    suprathreshold_period: 0.1
+  head_direction:
+    enabled: false
+    rotate_180: true
+    event_lockout: 10
+    min_duration: 2
+    well_angle_range: 6
+    within_angle_range: 6
+    well_loc: [[928.895, 255.175], [301.263, 277.608]]
+kinematics:
+  smooth_x: true
+  smooth_y: true
+  smooth_speed: false
+  smoothing_filter: [0.31, 0.29, 0.25, 0.15]
+  scale_factor: 0.2644 # to scale raw position input to cm for SC66
+cred_interval:
+  val: 0.5
+  max_num: 5
+display:
+  stim_decider:
+    position: 150
+    decoding_bins: 2000
+  ripples:
+    lfp: 100000
+  encoder:
+    encoding_spikes: 5000
+    total_spikes: 50000
+    occupancy: 5000
+    position: 5000
+  decoder:
+    total_spikes: 50000
+    occupancy: 100
+process_monitor:
+  interval: 15 # how often (in seconds) to check processes. set to <= 0 to disable
+  timeout: 3 # in seconds, needs to be sufficiently long to receive messages from all ranks
