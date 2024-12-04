@@ -261,7 +261,7 @@ class TabbedDialog(QDialog):
     def _setup_target_arm(self, layout):
         """Set up widgets and data related to the replay target arm"""
 
-        self._target_arm_label = QLabel(self.tr("Replay target arm"))
+        self._target_arm_label = QLabel(self.tr("Num scm each arm per minute"))
         layout.addWidget(self._target_arm_label, 2, 0)
 
         self._target_arm_edit = QLineEdit()
@@ -757,11 +757,14 @@ class TabbedDialog(QDialog):
             num_arms = len(
                 self._config['encoder']['position']['arm_coords']
             )
+            ''' #NOTE(DS): got rid of this because this is no more target arm; it's num_scm_each_arm_per_minute
             target_arm = int(target_arm)
             if target_arm < 0:
                 target_arm = 0
             elif target_arm >= num_arms:
                 target_arm = num_arms - 1
+            '''
+
 
             self._main_params.replay_target_arm = target_arm
             self._send_main_params()
