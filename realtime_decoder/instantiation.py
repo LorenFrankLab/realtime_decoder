@@ -121,3 +121,33 @@ def create_encoder_process(comm, rank, config):
         comm, rank, config, encoder_manager, mpi_recv, gui_recv)
 
     return process
+
+def create_decoder_process(comm, rank, config):
+
+    pos_interface = trodesnet.TrodesDataReceiver(
+        comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+
+    pos_mapper = position.TrodesPositionMapper(
+        config['encoder']['position']['arm_ids'],
+        config['encoder']['position']['arm_coords'])
+
+    decoder_manager = decoder_process.DecoderManager(
+        rank, config,
+        decoder_process.DecoderMPISendInterface(comm, rank, config),
+        decoder_process.SpikeRecvInterface(comm, rank, config), pos_interface,
+        decoder_process.LFPTimeInterface(comm, rank, config), pos_mapper)
+
+    mpi_recv = base.StandardMPIRecvInterface(
+        comm, rank, config,
+        messages.MPIMessageTag.COMMAND_MESSAGE,
+        decoder_manager)
+
+    gui_recv = base.StandardMPIRecvInterface(
+        comm, rank, config,
+        messages.MPIMessageTag.GUI_PARAMETERS,
+        decoder_manager)
+
+    process = decoder_process.DecoderProcess(
+        comm, rank, config, decoder_manager, mpi_recv, gui_recv)
+
+    return process

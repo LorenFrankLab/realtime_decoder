@@ -181,17 +181,7 @@ def setup(config_path, numprocs):
     elif rank in config['rank']['encoders']:
         process = instantiation.create_encoder_process(comm, rank, config)
     elif rank in config['rank']['decoders']:
-        pos_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
-        )
-        pos_mapper = position.TrodesPositionMapper(
-            config['encoder']['position']['arm_ids'],
-            config['encoder']['position']['arm_coords']
-        )
-        process = decoder_process.DecoderProcess(
-            comm, rank, config, pos_interface, pos_mapper
-        )
-
+        process = instantiation.create_decoder_process(comm, rank, config)
         # prof = LineProfiler()
         # prof.add_module(decoder_process)
         # prof.runcall(process.main_loop)
