@@ -151,3 +151,7 @@ def create_decoder_process(comm, rank, config):
         comm, rank, config, decoder_manager, mpi_recv, gui_recv)
 
     return process
+
+def create_gui_process(comm, rank, config):
+
+    return gui_process.GuiProcess(comm, rank, config)

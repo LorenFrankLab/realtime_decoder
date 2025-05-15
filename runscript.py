@@ -189,8 +189,7 @@ def setup(config_path, numprocs):
         # prof.print_stats()
         # regloop = False
     elif rank in config['rank']['gui']:
-        process = GuiProcessStub(comm, rank, config)
-        process = gui_process.GuiProcess(comm, rank, config)
+        process = instantiation.create_gui_process(comm, rank, config)
     else:
         regloop = False
         raise ValueError(f"Could not find rank {rank} listed in the config file!")
