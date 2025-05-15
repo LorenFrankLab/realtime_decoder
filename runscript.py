@@ -179,20 +179,7 @@ def setup(config_path, numprocs):
         # prof.print_stats()
         # regloop = False
     elif rank in config['rank']['encoders']:
-        spikes_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.SPIKES
-        )
-        pos_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
-        )
-        pos_mapper = position.TrodesPositionMapper(
-            config['encoder']['position']['arm_ids'],
-            config['encoder']['position']['arm_coords']
-        )
-        process = encoder_process.EncoderProcess(
-            comm, rank, config, spikes_interface, pos_interface,
-            pos_mapper
-        )
+        process = instantiation.create_encoder_process(comm, rank, config)
     elif rank in config['rank']['decoders']:
         pos_interface = trodesnet.TrodesDataReceiver(
             comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
