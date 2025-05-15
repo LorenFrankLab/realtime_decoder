@@ -1,7 +1,6 @@
 from realtime_decoder import (
     base, messages, main_process, ripple_process, encoder_process,
-    decoder_process, gui_process, trodesnet, stimulation
-)
+    decoder_process, gui_process, trodesnet, stimulation, datatypes)
 
 
 """Creates different decoder objects. Note: By default these
@@ -14,55 +13,48 @@ def create_main_process(comm, rank, config):
 
     # Set up the stim decider
     stim_decider = stimulation.TwoArmTrodesStimDecider(
-        comm, rank, config, trodes_client
-    )
+        comm, rank, config, trodes_client)
 
     # The manager can function as a message handler
     main_manager = main_process.MainManager(
         rank, comm.Get_size(), config,
         main_process.MainMPISendInterface(comm, rank, config),
-        stim_decider, manager_label='state'
-    )
+        stim_decider, manager_label='state')
 
     # Set up the interfaces
     mpi_recv = base.StandardMPIRecvInterface(
         comm, rank, config,
         messages.MPIMessageTag.COMMAND_MESSAGE,
-        main_manager
-    )
+        main_manager)
 
     ripple_recv = main_process.GenericMainRecvInterface(
         comm, rank, config,
         messages.get_dtype("Ripples"),
         messages.MPIMessageTag.RIPPLE_DETECTION,
-        stim_decider
-    )
+        stim_decider)
 
     vel_pos_recv = main_process.GenericMainRecvInterface(
         comm, rank, config,
         messages.get_dtype("VelocityPosition"),
         messages.MPIMessageTag.VEL_POS,
-        stim_decider
-    )
+        stim_decider)
 
     posterior_recv = main_process.GenericMainRecvInterface(
         comm, rank, config,
         messages.get_dtype("Posterior", config=config),
         messages.MPIMessageTag.POSTERIOR,
-        stim_decider
-    )
+        stim_decider)
 
     gui_params_recv = base.StandardMPIRecvInterface(
         comm, rank, config,
         messages.MPIMessageTag.GUI_PARAMETERS,
-        stim_decider
-    )
+        stim_decider)
 
     # Set up the main process
     process = main_process.MainProcess(
         comm, rank, config, stim_decider, trodes_client, main_manager,
-        mpi_recv, ripple_recv, vel_pos_recv, posterior_recv, gui_params_recv
-    )
+        mpi_recv, ripple_recv, vel_pos_recv, posterior_recv, gui_params_recv)
+
     trodes_client.set_startup_callback(process.startup)
     trodes_client.set_termination_callback(process.trigger_termination)
 
