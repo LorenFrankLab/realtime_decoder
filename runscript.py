@@ -14,7 +14,7 @@ from realtime_decoder import (
     datatypes, position, trodesnet, stimulation,
     main_process, ripple_process, encoder_process,
     decoder_process, gui_process, base, messages,
-    merge_rec
+    merge_rec, instantiation
 )
 
 # from line_profiler import LineProfiler
@@ -170,15 +170,7 @@ def setup(config_path, numprocs):
     #################################################
     
     if rank in config['rank']['supervisor']:
-        trodes_client = trodesnet.TrodesClient(config)
-        stim_decider = stimulation.TwoArmTrodesStimDecider(
-            comm, rank, config, trodes_client
-        )
-        process = main_process.MainProcess(
-            comm, rank, config, stim_decider, trodes_client
-        )
-        trodes_client.set_startup_callback(process.startup)
-        trodes_client.set_termination_callback(process.trigger_termination)
+        process = instantiation.create_main_process(comm, rank, config)
     elif rank in config['rank']['ripples']:
         lfp_interface = trodesnet.TrodesDataReceiver(
             comm, rank, config, datatypes.Datatypes.LFP
