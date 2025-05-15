@@ -3,7 +3,6 @@
 import time
 import numpy as np
 
-from zmq import ZMQError
 from typing import Sequence, List
 from mpi4py import MPI
 
@@ -385,7 +384,11 @@ class MainManager(base.MessageHandler):
 class MainProcess(base.RealtimeProcess):
     """Top level object in main_process"""
 
-    def __init__(self, comm, rank, config, stim_decider, network_client):
+    def __init__(
+        self, comm, rank, config, stim_decider, network_client,
+        main_manager, mpi_recv, ripple_recv, vel_pos_recv, posterior_recv,
+        gui_params_recv
+    ):
 
         super().__init__(comm, rank, config)
 
@@ -397,47 +400,13 @@ class MainProcess(base.RealtimeProcess):
 
         self._network_client = network_client
 
-        # main process doesn't actually have to keep a reference
-        # to the stim decider, but we do anyway for readability
-        self._stim_decider = stim_decider
-
-        self._main_manager = MainManager(
-            rank, comm.Get_size(), config,
-            MainMPISendInterface(comm, rank, config),
-            stim_decider, manager_label='state'
-        )
-
-        # Interfaces
-        self._mpi_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.COMMAND_MESSAGE,
-            self._main_manager
-        )
-
-        self._ripple_recv = GenericMainRecvInterface(
-            comm, rank, config,
-            messages.get_dtype("Ripples"),
-            messages.MPIMessageTag.RIPPLE_DETECTION,
-            stim_decider
-        )
-
-        self._vel_pos_recv = GenericMainRecvInterface(
-            comm, rank, config,
-            messages.get_dtype("VelocityPosition"),
-            messages.MPIMessageTag.VEL_POS,
-            stim_decider
-        )
-
-        self._posterior_recv = GenericMainRecvInterface(
-            comm, rank, config,
-            messages.get_dtype("Posterior", config=config),
-            messages.MPIMessageTag.POSTERIOR,
-            stim_decider
-        )
-
-        self._gui_params_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.GUI_PARAMETERS,
-            stim_decider
-        )
+        self._main_manager = main_manager
+        
+        self._mpi_recv = mpi_recv
+        self._ripple_recv = ripple_recv
+        self._vel_pos_recv = vel_pos_recv
+        self._posterior_recv = posterior_recv
+        self._gui_params_recv = gui_params_recv
 
         self._ranks_to_check = [r for r in range(comm.Get_size())]
         self._ranks_to_check.remove(self.rank)

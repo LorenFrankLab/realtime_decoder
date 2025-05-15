@@ -967,27 +967,13 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
 class DecoderProcess(base.RealtimeProcess):
     """Top level object in decoder_process"""
 
-    def __init__(self, comm, rank, config, pos_interface, pos_mapper):
+    def __init__(self, comm, rank, config, decoder_manager, mpi_recv, gui_recv):
         super().__init__(comm, rank, config)
 
-        try:
-            self._decoder_manager = DecoderManager(
-                rank, config, DecoderMPISendInterface(comm, rank, config),
-                SpikeRecvInterface(comm, rank, config), pos_interface,
-                LFPTimeInterface(comm, rank, config), pos_mapper
-            )
-        except:
-            self.class_log.exception("Exception in init!")
+        self._decoder_manager = decoder_manager
 
-        self._mpi_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.COMMAND_MESSAGE,
-            self._decoder_manager
-        )
-
-        self._gui_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.GUI_PARAMETERS,
-            self._decoder_manager
-        )
+        self._mpi_recv = mpi_recv
+        self._gui_recv = gui_recv
 
     def main_loop(self):
         """Main data processing loop"""

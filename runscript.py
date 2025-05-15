@@ -14,7 +14,7 @@ from realtime_decoder import (
     datatypes, position, trodesnet, stimulation,
     main_process, ripple_process, encoder_process,
     decoder_process, gui_process, base, messages,
-    merge_rec
+    merge_rec, instantiation
 )
 
 # from line_profiler import LineProfiler
@@ -170,58 +170,18 @@ def setup(config_path, numprocs):
     #################################################
     
     if rank in config['rank']['supervisor']:
-        trodes_client = trodesnet.TrodesClient(config)
-        stim_decider = stimulation.TwoArmTrodesStimDecider(
-            comm, rank, config, trodes_client
-        )
-        process = main_process.MainProcess(
-            comm, rank, config, stim_decider, trodes_client
-        )
-        trodes_client.set_startup_callback(process.startup)
-        trodes_client.set_termination_callback(process.trigger_termination)
+        process = instantiation.create_main_process(comm, rank, config)
     elif rank in config['rank']['ripples']:
-        lfp_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.LFP
-        )
-        pos_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
-        )
-        process = ripple_process.RippleProcess(
-            comm, rank, config, lfp_interface, pos_interface
-        )
-
+        process = instantiation.create_ripple_process(comm, rank, config)
         # prof = LineProfiler()
         # prof.add_module(ripple_process)
         # prof.runcall(process.main_loop)
         # prof.print_stats()
         # regloop = False
     elif rank in config['rank']['encoders']:
-        spikes_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.SPIKES
-        )
-        pos_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
-        )
-        pos_mapper = position.TrodesPositionMapper(
-            config['encoder']['position']['arm_ids'],
-            config['encoder']['position']['arm_coords']
-        )
-        process = encoder_process.EncoderProcess(
-            comm, rank, config, spikes_interface, pos_interface,
-            pos_mapper
-        )
+        process = instantiation.create_encoder_process(comm, rank, config)
     elif rank in config['rank']['decoders']:
-        pos_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
-        )
-        pos_mapper = position.TrodesPositionMapper(
-            config['encoder']['position']['arm_ids'],
-            config['encoder']['position']['arm_coords']
-        )
-        process = decoder_process.DecoderProcess(
-            comm, rank, config, pos_interface, pos_mapper
-        )
-
+        process = instantiation.create_decoder_process(comm, rank, config)
         # prof = LineProfiler()
         # prof.add_module(decoder_process)
         # prof.runcall(process.main_loop)
@@ -229,8 +189,7 @@ def setup(config_path, numprocs):
         # prof.print_stats()
         # regloop = False
     elif rank in config['rank']['gui']:
-        process = GuiProcessStub(comm, rank, config)
-        process = gui_process.GuiProcess(comm, rank, config)
+        process = instantiation.create_gui_process(comm, rank, config)
     else:
         regloop = False
         raise ValueError(f"Could not find rank {rank} listed in the config file!")

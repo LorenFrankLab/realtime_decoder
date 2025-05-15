@@ -713,27 +713,14 @@ class EncoderProcess(base.RealtimeProcess):
     """Top level object for encoder_process"""
 
     def __init__(
-        self, comm, rank, config, spikes_interface, pos_interface, pos_mapper
+        self, comm, rank, config, encoder_manager, mpi_recv, gui_recv
     ):
         super().__init__(comm, rank, config)
 
-        try:
-            self._encoder_manager = EncoderManager(
-                rank, config, EncoderMPISendInterface(comm, rank, config),
-                spikes_interface, pos_interface, pos_mapper
-            )
-        except:
-            self.class_log.exception("Exception in init!")
+        self._encoder_manager = encoder_manager
 
-        self._mpi_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.COMMAND_MESSAGE,
-            self._encoder_manager
-        )
-
-        self._gui_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.GUI_PARAMETERS,
-            self._encoder_manager
-        )
+        self._mpi_recv = mpi_recv
+        self._gui_recv = gui_recv
 
     def main_loop(self):
         """Main data processing loop"""
