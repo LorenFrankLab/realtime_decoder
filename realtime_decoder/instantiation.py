@@ -59,3 +59,31 @@ def create_main_process(comm, rank, config):
     trodes_client.set_termination_callback(process.trigger_termination)
 
     return process
+
+
+def create_ripple_process(comm, rank, config):
+
+    lfp_interface = trodesnet.TrodesDataReceiver(
+        comm, rank, config, datatypes.Datatypes.LFP)
+
+    pos_interface = trodesnet.TrodesDataReceiver(
+        comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+
+    # The manager can function as a message handler
+    ripple_manager = ripple_process.RippleManager(
+        rank, config,
+        ripple_process.RippleMPISendInterface(comm, rank, config),
+        lfp_interface, pos_interface)
+
+    mpi_recv = base.StandardMPIRecvInterface(
+        comm, rank, config, messages.MPIMessageTag.COMMAND_MESSAGE,
+        ripple_manager)
+
+    gui_recv = base.StandardMPIRecvInterface(
+        comm, rank, config, messages.MPIMessageTag.GUI_PARAMETERS,
+        ripple_manager)
+
+    process = ripple_process.RippleProcess(
+        comm, rank, config, ripple_manager, mpi_recv, gui_recv)
+
+    return process

@@ -172,16 +172,7 @@ def setup(config_path, numprocs):
     if rank in config['rank']['supervisor']:
         process = instantiation.create_main_process(comm, rank, config)
     elif rank in config['rank']['ripples']:
-        lfp_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.LFP
-        )
-        pos_interface = trodesnet.TrodesDataReceiver(
-            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
-        )
-        process = ripple_process.RippleProcess(
-            comm, rank, config, lfp_interface, pos_interface
-        )
-
+        process = instantiation.create_ripple_process(comm, rank, config)
         # prof = LineProfiler()
         # prof.add_module(ripple_process)
         # prof.runcall(process.main_loop)

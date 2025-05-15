@@ -730,25 +730,13 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
 class RippleProcess(base.RealtimeProcess):
     """Top level object for ripple_process"""
 
-    def __init__(self, comm, rank, config, lfp_interface, pos_interface):
+    def __init__(self, comm, rank, config, ripple_manager, mpi_recv, gui_recv):
         super().__init__(comm, rank, config)
 
-        try:
-            self._ripple_manager = RippleManager(
-                rank, config, RippleMPISendInterface(comm, rank, config),
-                lfp_interface, pos_interface)
-        except:
-            self.class_log.exception("Exception in init!")
+        self._ripple_manager = ripple_manager
 
-        self._mpi_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.COMMAND_MESSAGE,
-            self._ripple_manager
-        )
-
-        self._gui_recv = base.StandardMPIRecvInterface(
-            comm, rank, config, messages.MPIMessageTag.GUI_PARAMETERS,
-            self._ripple_manager
-        )
+        self._mpi_recv = mpi_recv
+        self._gui_recv = gui_recv
 
     def main_loop(self):
         """Main data processing loop"""
