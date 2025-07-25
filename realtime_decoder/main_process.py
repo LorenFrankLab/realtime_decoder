@@ -7,7 +7,7 @@ from typing import Sequence, List
 from mpi4py import MPI
 
 from realtime_decoder import (
-    base, utils, messages, binary_record
+    base, trodes_file_sim, utils, messages, binary_record
 )
 
 ####################################################################################
@@ -132,6 +132,18 @@ class MainMPISendInterface(base.MPISendInterface):
             tag=messages.MPIMessageTag.COMMAND_MESSAGE
         )
 
+    def send_synchronize_datastreams(
+        self, ranks:Sequence[int], start_time:float,
+        first_timestamp:int, last_timestamp:int):
+
+        for rank in ranks:
+            self.comm.send(
+                obj=messages.SynchronizeDatastreams(
+                    start_time, first_timestamp, last_timestamp),
+                dest=rank,
+                tag=messages.MPIMessageTag.COMMAND_MESSAGE
+            )
+
 ####################################################################################
 # Managers
 ####################################################################################
@@ -243,6 +255,11 @@ class MainManager(base.MessageHandler):
             self._startup_rec_writers()
             self._activate_datastreams()
 
+            if self._config['datasource'] == 'trodes_file_simulator':
+                # For this special case, we need to synchronize the file
+                # readers to a global time
+                self._sync_file_readers()
+
             self._send_decoder_started()
 
             self._started = True
@@ -347,6 +364,38 @@ class MainManager(base.MessageHandler):
                 self._rec_manager.get_new_writer_message()
             )
         self._stim_decider.start_record_writing()
+
+    def _sync_file_readers(self):
+        """Synchronize other processes to a common time and tell them
+        the valid range of data"""
+
+        datasource = self._config['datasource']
+        pos_data, lin_pos_data = trodes_file_sim.load_pos(
+            self._config[datasource]['raw_dir'])
+
+        # Give ample amount of time for other processes to synchronize
+        start_time = time.time_ns() + 5e9
+        first_timestamp = pos_data['time'][0]
+        last_timestamp = pos_data['time'][-1]
+        self._send_interface.send_synchronize_datastreams(
+            self._config['rank']['ripples'],
+            start_time,
+            first_timestamp,
+            last_timestamp
+        )
+        self._send_interface.send_synchronize_datastreams(
+            self._config['rank']['encoders'],
+            start_time,
+            first_timestamp,
+            last_timestamp
+        )
+        self._send_interface.send_synchronize_datastreams(
+            self._config['rank']['decoders'],
+            start_time,
+            first_timestamp,
+            last_timestamp
+        )
+
 
     def _send_decoder_started(self):
         """Send a message signifying that the decoder system has started

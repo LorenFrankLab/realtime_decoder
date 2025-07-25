@@ -344,6 +344,15 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             self.class_log.info("Activating datastreams")
             self._spikes_interface.activate()
             self._pos_interface.activate()
+        # This message should only be received in a simulation
+        elif isinstance(msg, messages.SynchronizeDatastreams):
+            self.class_log.info("Synchronizing datastreams")
+            self._spikes_interface.sync_data_time(
+                msg.start_time, msg.first_timestamp, msg.last_timestamp
+            )
+            self._pos_interface.sync_data_time(
+                msg.start_time, msg.first_timestamp, msg.last_timestamp
+            )
         elif isinstance(msg, messages.TerminateSignal):
             rank = mpi_status.source
             self.class_log.info(f"Got terminate signal from rank {rank}")

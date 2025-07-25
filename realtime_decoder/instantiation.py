@@ -1,16 +1,19 @@
 from realtime_decoder import (
     base, messages, main_process, ripple_process, encoder_process,
-    decoder_process, gui_process, trodesnet, stimulation, datatypes,
+    decoder_process, gui_process, trodes_file_sim, trodesnet, stimulation, datatypes,
     position, taskstate)
 
 
 """Creates different decoder objects. Note: By default these
 are designed to work with Trodes"""
 
-def create_main_process(comm, rank, config):
+def create_main_process(comm, rank, config, *, simulation=False):
 
-    # Set up the trodes client
-    trodes_client = trodesnet.TrodesClient(config)
+    if simulation:
+        trodes_client = trodes_file_sim.TrodesClientStub(config)
+    else:
+        # Set up the trodes client
+        trodes_client = trodesnet.TrodesClient(config)
 
     # Set up the stim decider
     stim_decider = stimulation.TwoArmTrodesStimDecider(
@@ -56,22 +59,34 @@ def create_main_process(comm, rank, config):
         comm, rank, config, stim_decider, trodes_client, main_manager,
         mpi_recv, ripple_recv, vel_pos_recv, posterior_recv, gui_params_recv)
 
-    trodes_client.set_startup_callback(process.startup)
-    trodes_client.set_termination_callback(process.trigger_termination)
+    if not simulation:
+        trodes_client.set_startup_callback(process.startup)
+        trodes_client.set_termination_callback(process.trigger_termination)
 
     return process
 
 
-def create_ripple_process(comm, rank, config):
+def create_ripple_process(comm, rank, config, *, simulation=False):
 
-    lfp_interface = trodesnet.TrodesDataReceiver(
-        comm, rank, config, datatypes.Datatypes.LFP)
+    if simulation:
+        lfp_interface = trodes_file_sim.TrodesFileDataReader(
+            comm, rank, config, datatypes.Datatypes.LFP)
 
-    pos_interface = trodesnet.TrodesDataReceiver(
-        comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+        pos_interface = trodes_file_sim.TrodesFileDataReader(
+            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+
+        ripple_manager_obj = trodes_file_sim.SimulatorRippleManager
+    else:
+        lfp_interface = trodesnet.TrodesDataReceiver(
+            comm, rank, config, datatypes.Datatypes.LFP)
+
+        pos_interface = trodesnet.TrodesDataReceiver(
+            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+
+        ripple_manager_obj = ripple_process.RippleManager
 
     # The manager can function as a message handler
-    ripple_manager = ripple_process.RippleManager(
+    ripple_manager = ripple_manager_obj(
         rank, config,
         ripple_process.RippleMPISendInterface(comm, rank, config),
         lfp_interface, pos_interface)
@@ -90,19 +105,30 @@ def create_ripple_process(comm, rank, config):
     return process
 
 
-def create_encoder_process(comm, rank, config):
+def create_encoder_process(comm, rank, config, *, simulation=False):
 
-    spikes_interface = trodesnet.TrodesDataReceiver(
-        comm, rank, config, datatypes.Datatypes.SPIKES)
+    if simulation:
+        spikes_interface = trodes_file_sim.TrodesFileDataReader(
+            comm, rank, config, datatypes.Datatypes.SPIKES)
 
-    pos_interface = trodesnet.TrodesDataReceiver(
-        comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+        pos_interface = trodes_file_sim.TrodesFileDataReader(
+            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+
+        encoder_manager_obj = trodes_file_sim.SimulatorEncoderManager
+    else:
+        spikes_interface = trodesnet.TrodesDataReceiver(
+            comm, rank, config, datatypes.Datatypes.SPIKES)
+
+        pos_interface = trodesnet.TrodesDataReceiver(
+            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+
+        encoder_manager_obj = encoder_process.EncoderManager
 
     pos_mapper = position.TrodesPositionMapper(
         config['encoder']['position']['arm_ids'],
         config['encoder']['position']['arm_coords'])
 
-    encoder_manager = encoder_process.EncoderManager(
+    encoder_manager = encoder_manager_obj(
         rank, config,
         encoder_process.EncoderMPISendInterface(comm, rank, config),
         spikes_interface, pos_interface, pos_mapper)
@@ -122,16 +148,24 @@ def create_encoder_process(comm, rank, config):
 
     return process
 
-def create_decoder_process(comm, rank, config):
+def create_decoder_process(comm, rank, config, *, simulation=False):
 
-    pos_interface = trodesnet.TrodesDataReceiver(
-        comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+    if simulation:
+        pos_interface = trodes_file_sim.TrodesFileDataReader(
+            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+
+        decoder_manager_obj = trodes_file_sim.SimulatorDecoderManager
+    else:
+        pos_interface = trodesnet.TrodesDataReceiver(
+            comm, rank, config, datatypes.Datatypes.LINEAR_POSITION)
+
+        decoder_manager_obj = decoder_process.DecoderManager
 
     pos_mapper = position.TrodesPositionMapper(
         config['encoder']['position']['arm_ids'],
         config['encoder']['position']['arm_coords'])
 
-    decoder_manager = decoder_process.DecoderManager(
+    decoder_manager = decoder_manager_obj(
         rank, config,
         decoder_process.DecoderMPISendInterface(comm, rank, config),
         decoder_process.SpikeRecvInterface(comm, rank, config), pos_interface,

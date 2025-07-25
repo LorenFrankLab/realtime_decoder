@@ -201,6 +201,14 @@ class GuiEncodingModelParameters(PrintableClass):
         self.encoding_velocity_threshold = encoding_velocity_threshold
         self.freeze_model = freeze_model
 
+class SynchronizeDatastreams(PrintableClass):
+
+    """Synchronize data streams to a universal clock"""
+
+    def __init__(self, start_time, first_timestamp, last_timestamp):
+        self.start_time = start_time
+        self.first_timestamp = first_timestamp
+        self.last_timestamp = last_timestamp
 
 def get_dtype(msg_type:str, *, config:Dict={}):
 

@@ -18,7 +18,7 @@ class TaskStateHandler(logging_base.LoggingClass):
         source = self.config['datasource']
         if source == 'trodes':
             self._taskstate_file = self.config[source]['taskstate_file']
-        elif source == 'trodes_simulator':
+        elif source == 'trodes_file_simulator':
             statescript_log_file = utils.find_unique_file(
                 os.path.join(
                     self.config[source]['raw_dir'], 
@@ -47,7 +47,7 @@ class TaskStateHandler(logging_base.LoggingClass):
         source = self.config['datasource']
         if source == 'trodes':
             return utils.get_last_num(self._taskstate_file)
-        elif source == 'trodes_simulator':
+        elif source == 'trodes_file_simulator':
             taskstate = 1 if timestamp < self._switch_time else 2
             if taskstate == 2 and not self._is_switch_logged:
                 self.class_log.info(f"Task state switched to 2")
