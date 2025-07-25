@@ -1,0 +1,11 @@
+oyaml
+mpi4py
+numpy
+pandas
+seaborn
+pyqtgraph
+pyqt
+ghostipy
+scipy
+pyzmq
+trodesnetwork
