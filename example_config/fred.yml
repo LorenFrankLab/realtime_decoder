@@ -51,6 +51,7 @@ files:
   rec_postfix: 'bin_rec'
   timing_postfix: 'timing'
 trodes:
+  # Customize path as needed
   config_file: '20210419_fred_06_r3.trodesconf'
   # taskstate_file and instructive_file are optional,
   # but not necessarily for a custom stim decider
