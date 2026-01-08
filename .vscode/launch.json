@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Realtime Decoder",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/runscript.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/"
+            },
+            "args": [
+                // Replace with the path to your config file
+                "config/SC80_nTrode12.yml",
+            ]
+        }
+    ]
+}
