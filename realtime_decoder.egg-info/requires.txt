@@ -1,8 +1,0 @@
-ghostipy>=0.2.0
-pandas
-scipy
-mpi4py
-Cython
-trodesnetwork
-pyqtgraph
-oyaml
