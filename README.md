@@ -24,6 +24,23 @@ mpiexec -np <num_processes> -bind-to hwthread python -u runscript.py <path/to/co
 
 Note: `-bind-to hwthread` is optional but expected to give the best performance if enough threads are available.
 
+### Running without acquisition hardware (synthetic data source)
+
+You can run the full MPI pipeline against an in-process synthetic data
+generator — no Trodes, SpikeGLX, or other acquisition rig required. This
+is useful for smoke-testing an install, developing on a laptop, and CI.
+
+```
+mpiexec -np 5 python -u runscript.py config/demo_synthetic.yml
+```
+
+Selection is driven by the top-level `datasource` config key
+(`trodes` by default; `synthetic` to use the generator). The synthetic
+source produces Poisson spikes with Gaussian mark vectors, walks the
+synthetic animal back and forth along a single linear segment, and
+auto-terminates after `synthetic.run_duration_s` seconds. See
+`realtime_decoder/synthetic.py` for the full set of tunables.
+
 # Configuration
 
 Please see the example configuration file in the `example_config` folder. Options are described in more detail below.
