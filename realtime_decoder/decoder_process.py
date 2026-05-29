@@ -518,7 +518,7 @@ class DecoderManager(base.BinaryRecordBase, base.MessageHandler):
         config = self._config
         rank = self.rank
 
-        if config['algorithm'] in ('clusterless_decoder, clusterless_classifier'):
+        if config['algorithm'] in ('clusterless_decoder', 'clusterless_classifier'):
             self._decoder = ClusterlessDecoder(
                 rank, config,
                 position.PositionBinStruct(
