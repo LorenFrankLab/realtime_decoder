@@ -1,12 +1,16 @@
 ---
 # Demo config: runs the full MPI pipeline against the in-process
-# synthetic data source (realtime_decoder.synthetic). No Trodes, no
-# acquisition hardware, no driver setup required.
+# synthetic data source. No Trodes / acquisition hardware required.
 #
 # Run:
 #   mpiexec -np 5 python -u runscript.py config/demo_synthetic.yml
 #
-# Ranks: 0=supervisor, 1=decoder, 2=gui, 3=ripples, 4=encoder
+# Everything not set here inherits from defaults.yml via `_extends`.
+
+_extends: defaults.yml
+
+datasource: "synthetic"
+
 rank:
   supervisor: [0]
   ripples: [3]
@@ -14,57 +18,35 @@ rank:
   encoders: [4]
   gui: [2]
 rank_settings:
-  enable_rec: [0,1,3,4]
+  enable_rec: [0, 1, 3, 4]
 trode_selection:
   ripples: [1]
   decoding: [1]
 decoder_assignment:
   1: [1]
-algorithm: "clusterless_decoder"
-datasource: "synthetic"
-num_setup_messages: 100
-preloaded_model: false
-frozen_model: false
+
 files:
   output_dir: '/tmp/realtime_decoder_demo'
   prefix: 'demo'
   rec_postfix: 'bin_rec'
   timing_postfix: 'timing'
-# --- synthetic-source parameters (all optional, defaults shown) -----------
+
+# --- synthetic-source parameters (all optional, defaults documented in
+# realtime_decoder/synthetic.py)
 synthetic:
   spike_rate_hz: 30
-  mark_dim: 4
-  mark_amplitude_uv: 120     # well above encoder.spk_amp below
-  track_length_cm: 40        # fits into the 0..41 bins
+  mark_dim: 4              # must equal encoder.mark_dim below
+  mark_amplitude_uv: 120
+  track_length_cm: 40
   walk_speed_cm_s: 20
-  startup_delay_s: 1.0       # supervisor waits this long, then fires play
-  run_duration_s: 30         # auto-terminate after this many seconds
+  startup_delay_s: 1.0
+  run_duration_s: 30
   voltage_scaling_factor: 0.195
-sampling_rate:
-  spikes: 30000
-  lfp: 1500
-  position: 30
+
+# Lower-volume timings so the demo doesn't waste memory
 ripples:
-  max_ripple_samples: 450
-  vel_thresh: 10
-  freeze_stats: false
   timings_bufsize: 100000
-  filter:
-    type: 'iir'
-    order: 2
-    crit_freqs: [150, 250]
-    kwargs:
-      btype: 'bandpass'
-      ftype: 'butter'
-  smoothing_filter:
-    num_taps: 15
-    band_edges: [50, 55]
-    desired: [1, 0]
-  threshold:
-    standard: 3.5
-    conditioning: 3.75
-    content: 4
-    end: 0
+
 encoder:
   spk_amp: 60
   use_channel_dist_from_max_amp: 2
@@ -78,43 +60,25 @@ encoder:
     upper: 41
     num_bins: 41
     arm_ids: [0]
-    arm_coords: [[0,40]]
+    arm_coords: [[0, 40]]
   mark_kernel:
     mean: 0
     std: 20
     use_filter: false
     n_std: 1
     n_marks_min: 10
+
 decoder:
   decoder_to_message: 1
   bufsize: 2000
   timings_bufsize: 10000
-  cred_int_bufsize: 10
   starting_arm1_bin: 10
   starting_arm2_bin: 30
   num_pos_points: 30
-  time_bin:
-    samples: 180
-    delay_samples: 180
-clusterless_decoder:
-  state_labels: ['state']
-  transmat_bias: 1
-gui:
-  colormap: 'rocket'
-  send_interval: 0
-  refresh_rate: 25
-  trace_length: 2
-  state_colors: ['#4c72b0','#dd8452', '#55a868']
-  num_xticks: 5
-mua:
-  threshold:
-    trigger: 4
-    end: 0
-  freeze_stats: false
-  moving_avg_window: 5
+
 stimulation:
   instructive: false
-  shortcut_msg_on: false       # no ECU in demo mode
+  shortcut_msg_on: false
   automatic_threshold_update: false
   num_each_arm_per_minute: 1.1
   num_pos_points: 30
@@ -147,18 +111,12 @@ stimulation:
     well_angle_range: 6
     within_angle_range: 6
     well_loc: [[100, 100], [200, 200]]
+
 kinematics:
-  smooth_x: true
-  smooth_y: true
-  smooth_speed: false
-  smoothing_filter: [0.31, 0.29, 0.25, 0.15]
   scale_factor: 0.2644
-cred_interval:
-  val: 0.5
-  max_num: 5
+
 display:
   stim_decider:
-    position: 150
     decoding_bins: 200
   ripples:
     lfp: 10000
@@ -169,7 +127,3 @@ display:
     position: 500
   decoder:
     total_spikes: 5000
-    occupancy: 100
-process_monitor:
-  interval: 15
-  timeout: 3

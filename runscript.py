@@ -1,5 +1,6 @@
 import os
 import argparse
+import sys
 import time
 import datetime
 import logging
@@ -14,7 +15,7 @@ from realtime_decoder import (
     datatypes, position, trodesnet, synthetic, stimulation,
     main_process, ripple_process, encoder_process,
     decoder_process, gui_process, base, messages,
-    merge_rec
+    merge_rec, config_loader
 )
 
 
@@ -119,8 +120,17 @@ def setup(config_path, numprocs):
 
     num_digits = len(str(comm.Get_size()))
 
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    # Load via the resolver: handles `_extends` inheritance and runs
+    # validation up front so missing required keys produce one clear
+    # error before the MPI run starts, instead of an IndexError /
+    # KeyError deep inside a worker.
+    try:
+        config = config_loader.load_config(config_path)
+    except config_loader.ConfigError as exc:
+        if rank == 0:
+            print(f"[config] {exc}", file=sys.stderr, flush=True)
+        comm.Barrier()
+        sys.exit(2)
 
     os.makedirs(os.path.dirname(config['files']['output_dir']), exist_ok=True)
     prefix = config['files']['prefix']

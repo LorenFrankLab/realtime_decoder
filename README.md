@@ -45,6 +45,40 @@ auto-terminates after `synthetic.run_duration_s` seconds. See
 
 Please see the example configuration file in the `example_config` folder. Options are described in more detail below.
 
+## Defaults and inheritance
+
+Configs can extend a shared base file by declaring `_extends:` at the top:
+
+```yaml
+_extends: defaults.yml
+
+# only the keys that actually differ from defaults.yml go here
+rank:
+  supervisor: [0]
+  ...
+```
+
+`config/defaults.yml` ships with values shared across the SC* / fred / ginny
+configs (sampling rates, ripple filter, GUI, MUA, kinematics smoothing
+filter, display intervals, process monitor). Per-animal configs only need
+to specify what's actually different — typically `rank`, `trode_selection`,
+`decoder_assignment`, `files`, `encoder.position`, `kinematics.scale_factor`,
+and `stimulation`. Existing configs without `_extends` continue to work
+unchanged.
+
+Relative paths in `_extends` resolve next to the file that declares them.
+You may pass a single path or a list (parents merged in order).
+
+## Validation
+
+At startup the loader checks the resolved config against a minimal schema
+(required ranks, known algorithm, known datasource, encoder dimensions
+match the synthetic source, every decoder rank has an assignment, etc.).
+Missing or malformed keys produce a single readable error before the MPI
+processes spawn workers, instead of an `IndexError` deep inside a rank.
+
+
+
 ## `rank`
 
 Describes which MPI rank should be assigned to each process type.
