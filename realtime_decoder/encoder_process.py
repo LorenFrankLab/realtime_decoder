@@ -8,7 +8,8 @@ from mpi4py import MPI
 from typing import Sequence, List
 
 from realtime_decoder import (
-    base, utils, position, datatypes, messages, binary_record, taskstate
+    base, utils, position, datatypes, messages, binary_record, taskstate,
+    rt_tuning,
 )
 
 ####################################################################################
@@ -830,19 +831,20 @@ class EncoderProcess(base.RealtimeProcess):
     def main_loop(self):
         """Main data processing loop"""
 
-        try:
-            self._encoder_manager.setup_mpi()
-            while True:
-                self._mpi_recv.receive()
-                self._gui_recv.receive()
-                self._encoder_manager.next_iter()
+        with rt_tuning.gc_paused_for_main_loop(self.config):
+            try:
+                self._encoder_manager.setup_mpi()
+                while True:
+                    self._mpi_recv.receive()
+                    self._gui_recv.receive()
+                    self._encoder_manager.next_iter()
 
-        except StopIteration as ex:
-            self.class_log.info("Exiting normally")
-        except Exception as e:
-            self.class_log.exception(
-                "Encoder process exception occurred!"
-            )
+            except StopIteration as ex:
+                self.class_log.info("Exiting normally")
+            except Exception as e:
+                self.class_log.exception(
+                    "Encoder process exception occurred!"
+                )
 
         self._encoder_manager.finalize()
         self.class_log.info("Exited main loop")

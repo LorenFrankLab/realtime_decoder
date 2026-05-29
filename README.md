@@ -24,6 +24,12 @@ mpiexec -np <num_processes> -bind-to hwthread python -u runscript.py <path/to/co
 
 Note: `-bind-to hwthread` is optional but expected to give the best performance if enough threads are available.
 
+For closed-loop experiments where tail latency matters, see
+[docs/realtime_tuning.md](docs/realtime_tuning.md) for the OS-level
+recipe (CPU pinning, isolcpus, IRQ affinity, SCHED_FIFO, mlockall,
+PREEMPT_RT, a launcher script). The package already runs hot-rank main
+loops with `gc.disable()`; opt out via `performance.disable_gc_in_main_loop: false`.
+
 # Configuration
 
 Please see the example configuration file in the `example_config` folder. Options are described in more detail below.
