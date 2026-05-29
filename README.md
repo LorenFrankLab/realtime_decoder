@@ -24,6 +24,17 @@ mpiexec -np <num_processes> -bind-to hwthread python -u runscript.py <path/to/co
 
 Note: `-bind-to hwthread` is optional but expected to give the best performance if enough threads are available.
 
+### Tests
+
+The deterministic logic (kinematics, position binning, transition models,
+utils, config loader, synthetic source) has unit tests under `tests/`.
+These do not require MPI or any acquisition hardware.
+
+```
+pip install -e .[test]
+pytest -q
+```
+
 ### Running without acquisition hardware (synthetic data source)
 
 You can run the full MPI pipeline against an in-process synthetic data

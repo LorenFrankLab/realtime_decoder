@@ -21,11 +21,15 @@ setup(
                       'Cython',
                       'trodesnetwork',
                       'pyqtgraph',
-                      'oyaml'
+                      'oyaml',
+                      'pyyaml',
                      ],
+    extras_require={
+        'test': ['pytest'],
+    },
     author_email='jpc6@rice.edu',
     description='Realtime clusterless decoding',
-    packages=find_packages(),
+    packages=find_packages(exclude=['tests', 'tests.*']),
     keywords="neuroscience clusterless decoding",
     include_package_data=True,
     platforms='any',
