@@ -229,10 +229,14 @@ class Encoder(base.LoggingClass):
         # print("")
         # print(weights)
 
+        # `density=` (formerly `normed=`) intentionally omitted: we want the
+        # raw weighted sum per bin, which is the default behavior. `normed=`
+        # was removed in NumPy 1.24, which broke this call on any modern
+        # install.
         hist, hist_edges = np.histogram(
             a=positions,
             bins=self._pos_bin_struct.pos_bin_edges,
-            weights=weights, normed=False
+            weights=weights,
         )
 
         hist += 0.0000001
