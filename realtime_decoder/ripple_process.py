@@ -108,6 +108,7 @@ class EnvelopeEstimator(base.LoggingClass):
 
                 self._x_ripple[ii, 1:] = self._x_ripple[ii, :-1]
                 if ii == 0: # new input is incoming data
+                    #print(f"data shape : {data.shape}")
                     self._x_ripple[ii, 0] = data
                 else: # new input is IIR output of previous stage
                     self._x_ripple[ii, 0] = self._y_ripple[ii - 1, 0]
@@ -715,6 +716,7 @@ class RippleManager(base.BinaryRecordBase, base.MessageHandler):
         deviation of the ripple envelope"""
 
         num_signals = len(trodes)
+        print(f"num_signals: {len(trodes)}")
         # stats for individual traces
         self._means = np.zeros(num_signals)
         self._M2 = np.zeros(num_signals)
