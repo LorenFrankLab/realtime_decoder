@@ -1,5 +1,6 @@
 import os
 import argparse
+import sys
 import time
 import datetime
 import logging
@@ -11,11 +12,29 @@ from multiprocessing import cpu_count
 from mpi4py import MPI
 
 from realtime_decoder import (
-    datatypes, position, trodesnet, stimulation,
+    datatypes, position, trodesnet, synthetic, stimulation,
     main_process, ripple_process, encoder_process,
     decoder_process, gui_process, base, messages,
-    merge_rec
+    merge_rec, config_loader
 )
+
+
+def _data_source_factory(config):
+    """Pick the (receiver_class, client_class) pair for the configured
+    data source.
+
+    `datasource: trodes` (default) uses the live Trodes streams.
+    `datasource: synthetic` uses the in-process generator from
+    `realtime_decoder.synthetic` — install-and-run with no hardware.
+    """
+    ds = config.get('datasource', 'trodes')
+    if ds == 'trodes':
+        return trodesnet.TrodesDataReceiver, trodesnet.TrodesClient
+    if ds == 'synthetic':
+        return synthetic.SyntheticDataReceiver, synthetic.SyntheticClient
+    raise ValueError(
+        f"Unknown datasource {ds!r}; expected 'trodes' or 'synthetic'"
+    )
 
 # from line_profiler import LineProfiler
 
@@ -101,8 +120,17 @@ def setup(config_path, numprocs):
 
     num_digits = len(str(comm.Get_size()))
 
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    # Load via the resolver: handles `_extends` inheritance and runs
+    # validation up front so missing required keys produce one clear
+    # error before the MPI run starts, instead of an IndexError /
+    # KeyError deep inside a worker.
+    try:
+        config = config_loader.load_config(config_path)
+    except config_loader.ConfigError as exc:
+        if rank == 0:
+            print(f"[config] {exc}", file=sys.stderr, flush=True)
+        comm.Barrier()
+        sys.exit(2)
 
     os.makedirs(os.path.dirname(config['files']['output_dir']), exist_ok=True)
     prefix = config['files']['prefix']
@@ -169,21 +197,23 @@ def setup(config_path, numprocs):
     regloop = True
     #################################################
     
+    DataReceiver, Client = _data_source_factory(config)
+
     if rank in config['rank']['supervisor']:
-        trodes_client = trodesnet.TrodesClient(config)
+        net_client = Client(config)
         stim_decider = stimulation.TwoArmTrodesStimDecider(
-            comm, rank, config, trodes_client
+            comm, rank, config, net_client
         )
         process = main_process.MainProcess(
-            comm, rank, config, stim_decider, trodes_client
+            comm, rank, config, stim_decider, net_client
         )
-        trodes_client.set_startup_callback(process.startup)
-        trodes_client.set_termination_callback(process.trigger_termination)
+        net_client.set_startup_callback(process.startup)
+        net_client.set_termination_callback(process.trigger_termination)
     elif rank in config['rank']['ripples']:
-        lfp_interface = trodesnet.TrodesDataReceiver(
+        lfp_interface = DataReceiver(
             comm, rank, config, datatypes.Datatypes.LFP
         )
-        pos_interface = trodesnet.TrodesDataReceiver(
+        pos_interface = DataReceiver(
             comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
         )
         process = ripple_process.RippleProcess(
@@ -196,10 +226,10 @@ def setup(config_path, numprocs):
         # prof.print_stats()
         # regloop = False
     elif rank in config['rank']['encoders']:
-        spikes_interface = trodesnet.TrodesDataReceiver(
+        spikes_interface = DataReceiver(
             comm, rank, config, datatypes.Datatypes.SPIKES
         )
-        pos_interface = trodesnet.TrodesDataReceiver(
+        pos_interface = DataReceiver(
             comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
         )
         pos_mapper = position.TrodesPositionMapper(
@@ -211,7 +241,7 @@ def setup(config_path, numprocs):
             pos_mapper
         )
     elif rank in config['rank']['decoders']:
-        pos_interface = trodesnet.TrodesDataReceiver(
+        pos_interface = DataReceiver(
             comm, rank, config, datatypes.Datatypes.LINEAR_POSITION
         )
         pos_mapper = position.TrodesPositionMapper(
