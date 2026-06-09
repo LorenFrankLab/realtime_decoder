@@ -1,0 +1,129 @@
+---
+# Demo config: runs the full MPI pipeline against the in-process
+# synthetic data source. No Trodes / acquisition hardware required.
+#
+# Run:
+#   mpiexec -np 5 python -u runscript.py config/demo_synthetic.yml
+#
+# Everything not set here inherits from defaults.yml via `_extends`.
+
+_extends: defaults.yml
+
+datasource: "synthetic"
+
+rank:
+  supervisor: [0]
+  ripples: [3]
+  decoders: [1]
+  encoders: [4]
+  gui: [2]
+rank_settings:
+  enable_rec: [0, 1, 3, 4]
+trode_selection:
+  ripples: [1]
+  decoding: [1]
+decoder_assignment:
+  1: [1]
+
+files:
+  output_dir: '/tmp/realtime_decoder_demo'
+  prefix: 'demo'
+  rec_postfix: 'bin_rec'
+  timing_postfix: 'timing'
+
+# --- synthetic-source parameters (all optional, defaults documented in
+# realtime_decoder/synthetic.py)
+synthetic:
+  spike_rate_hz: 30
+  mark_dim: 4              # must equal encoder.mark_dim below
+  mark_amplitude_uv: 120
+  track_length_cm: 40
+  walk_speed_cm_s: 20
+  startup_delay_s: 1.0
+  run_duration_s: 30
+  voltage_scaling_factor: 0.195
+
+# Lower-volume timings so the demo doesn't waste memory
+ripples:
+  timings_bufsize: 100000
+
+encoder:
+  spk_amp: 60
+  use_channel_dist_from_max_amp: 2
+  mark_dim: 4
+  bufsize: 5000
+  timings_bufsize: 5000
+  vel_thresh: 5
+  num_pos_points: 30
+  position:
+    lower: 0
+    upper: 41
+    num_bins: 41
+    arm_ids: [0]
+    arm_coords: [[0, 40]]
+  mark_kernel:
+    mean: 0
+    std: 20
+    use_filter: false
+    n_std: 1
+    n_marks_min: 10
+
+decoder:
+  decoder_to_message: 1
+  bufsize: 2000
+  timings_bufsize: 10000
+  starting_arm1_bin: 10
+  starting_arm2_bin: 30
+  num_pos_points: 30
+
+stimulation:
+  instructive: false
+  shortcut_msg_on: false
+  automatic_threshold_update: false
+  num_each_arm_per_minute: 1.1
+  num_pos_points: 30
+  center_well_loc: [100, 100]
+  max_center_well_dist: 50
+  replay:
+    enabled: false
+    method: "posterior"
+    target_arm: 0
+    event_lockout: 0.2
+    sliding_window: 5
+    primary_arm_threshold: 0.4
+    secondary_arm_threshold: 0.4
+    other_arm_threshold: 0.3
+    max_arm_repeats: 8
+    instr_max_repeats: 3
+    min_unique_trodes: 1
+  ripples:
+    enabled: false
+    type: "standard"
+    method: "multichannel"
+    event_lockout: 0
+    num_above_thresh: 1
+    suprathreshold_period: 0.1
+  head_direction:
+    enabled: false
+    rotate_180: false
+    event_lockout: 10
+    min_duration: 2
+    well_angle_range: 6
+    within_angle_range: 6
+    well_loc: [[100, 100], [200, 200]]
+
+kinematics:
+  scale_factor: 0.2644
+
+display:
+  stim_decider:
+    decoding_bins: 200
+  ripples:
+    lfp: 10000
+  encoder:
+    encoding_spikes: 500
+    total_spikes: 5000
+    occupancy: 500
+    position: 500
+  decoder:
+    total_spikes: 5000

@@ -1,0 +1,101 @@
+---
+# Shared defaults for realtime_decoder configs.
+#
+# Per-animal / per-experiment YAMLs should declare:
+#     _extends: defaults.yml
+# at the top, then override only what's actually different. Anything not
+# overridden inherits from here. Lists and scalars are replaced as a
+# whole; nested dicts merge key-by-key.
+#
+# This file is intentionally conservative: it only contains values that
+# have been stable across the SC* / fred / ginny configs in this repo,
+# plus a few sane defaults for new fields. Per-animal kinematics,
+# stimulation, trode selection, and file paths must still live in the
+# child config.
+
+algorithm: "clusterless_decoder"
+datasource: "trodes"
+num_setup_messages: 100
+preloaded_model: false
+frozen_model: false
+
+sampling_rate:
+  spikes: 30000
+  lfp: 1500
+  position: 30
+
+ripples:
+  max_ripple_samples: 450
+  vel_thresh: 10
+  freeze_stats: false
+  timings_bufsize: 1000000
+  filter:
+    type: 'iir'
+    order: 2
+    crit_freqs: [150, 250]
+    kwargs:
+      btype: 'bandpass'
+      ftype: 'butter'
+  smoothing_filter:
+    num_taps: 15
+    band_edges: [50, 55]
+    desired: [1, 0]
+  threshold:
+    standard: 3.5
+    conditioning: 3.75
+    content: 4
+    end: 0
+
+decoder:
+  cred_int_bufsize: 10
+  time_bin:
+    samples: 180          # 6 ms at 30 kHz spike clock
+    delay_samples: 180
+
+clusterless_decoder:
+  state_labels: ['state']
+  transmat_bias: 1
+
+gui:
+  colormap: 'rocket'
+  send_interval: 0
+  refresh_rate: 25
+  trace_length: 2
+  state_colors: ['#4c72b0', '#dd8452', '#55a868']
+  num_xticks: 5
+
+mua:
+  threshold:
+    trigger: 4
+    end: 0
+  freeze_stats: false
+  moving_avg_window: 5
+
+cred_interval:
+  val: 0.5
+  max_num: 5
+
+kinematics:
+  smooth_x: true
+  smooth_y: true
+  smooth_speed: false
+  smoothing_filter: [0.31, 0.29, 0.25, 0.15]
+
+display:
+  stim_decider:
+    position: 150
+    decoding_bins: 2000
+  ripples:
+    lfp: 100000
+  encoder:
+    encoding_spikes: 5000
+    total_spikes: 50000
+    occupancy: 5000
+    position: 5000
+  decoder:
+    total_spikes: 50000
+    occupancy: 100
+
+process_monitor:
+  interval: 15
+  timeout: 3
