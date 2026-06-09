@@ -5,7 +5,7 @@ import numpy as np
 
 from realtime_decoder import (
     base, utils, position, messages, transitions,
-    binary_record, taskstate
+    binary_record, taskstate, rt_tuning
 )
 
 ####################################################################################
@@ -993,19 +993,20 @@ class DecoderProcess(base.RealtimeProcess):
     def main_loop(self):
         """Main data processing loop"""
 
-        try:
-            self._decoder_manager.setup_mpi()
-            while True:
-                self._mpi_recv.receive()
-                self._gui_recv.receive()
-                self._decoder_manager.next_iter()
+        with rt_tuning.gc_paused_for_main_loop(self.config):
+            try:
+                self._decoder_manager.setup_mpi()
+                while True:
+                    self._mpi_recv.receive()
+                    self._gui_recv.receive()
+                    self._decoder_manager.next_iter()
 
-        except StopIteration:
-            self.class_log.info("Exiting normally")
-        except Exception as e:
-            self.class_log.exception(
-                "Decoder process exception occurred!"
-            )
+            except StopIteration:
+                self.class_log.info("Exiting normally")
+            except Exception as e:
+                self.class_log.exception(
+                    "Decoder process exception occurred!"
+                )
 
         self._decoder_manager.finalize()
         self.class_log.info("Exited main loop")

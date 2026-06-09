@@ -10,7 +10,7 @@ from typing import List
 
 from realtime_decoder import (
     base, utils, datatypes, messages, binary_record,
-    position, taskstate
+    position, taskstate, rt_tuning
 )
 
 ####################################################################################
@@ -908,21 +908,22 @@ class RippleProcess(base.RealtimeProcess):
     def main_loop(self):
         """Main data processing loop"""
 
-        try:
-            self._ripple_manager.setup_mpi()
-            t0 = time.time()
-            freeze = True
-            while True:
-                self._mpi_recv.receive()
-                self._gui_recv.receive()
-                self._ripple_manager.next_iter()
+        with rt_tuning.gc_paused_for_main_loop(self.config):
+            try:
+                self._ripple_manager.setup_mpi()
+                t0 = time.time()
+                freeze = True
+                while True:
+                    self._mpi_recv.receive()
+                    self._gui_recv.receive()
+                    self._ripple_manager.next_iter()
 
-        except StopIteration as ex:
-            self.class_log.info("Exiting normally")
-        except Exception as e:
-            self.class_log.exception(
-                "Ripple process exception occurred!"
-            )
+            except StopIteration as ex:
+                self.class_log.info("Exiting normally")
+            except Exception as e:
+                self.class_log.exception(
+                    "Ripple process exception occurred!"
+                )
 
         self._ripple_manager.finalize()
         self.class_log.info("Exited main loop")
