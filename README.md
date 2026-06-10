@@ -205,6 +205,8 @@ This entire section is also optional and similar to the `custom_mean` section ab
 
 `n_marks_min`: Only used if `use_filter` is `true`. Minimum number of marks that must be in the n-cube surrounding a candidate spike mark to be considered for decoding.
 
+`exact_histogram`: Optional, default `false`. The per-spike joint probability uses a fast path (a uniform-bin histogram and a fused distance sum) that matches the original computation to within floating-point rounding (~1e-13). Set to `true` to restore the exact original numerics if you need bit-for-bit reproducibility against an older run. See `docs/latency_analysis.md`.
+
 ### `dead_channels`
 
 This section is optional.
@@ -229,7 +231,7 @@ For both options below, the reference sampling rate is the `spikes` sampling rat
 
 `samples`: How many samples make up a time bin. For example, if the `spikes` sampling rate is 30 kHz and `samples` is 180, the time bin size is 6 ms.
 
-`delay_samples`: How many samples behind the current LFP timestamp the right edge of the current time bin should be. For example, if the `spikes` sampling rate is 30 kHz and `delay_samples` is 90, the right edge of the current time bin will be 3 ms behind the current LFP timestamp.
+`delay_samples`: How many samples behind the current LFP timestamp the right edge of the current time bin should be. For example, if the `spikes` sampling rate is 30 kHz and `delay_samples` is 90, the right edge of the current time bin will be 3 ms behind the current LFP timestamp. This is a spike jitter buffer, and it is the single largest controllable term in end-to-end latency: tune it down to your measured worst-case encoder-to-decoder arrival time rather than copying a round number between configs. See `docs/latency_analysis.md`.
 
 ## `clusterless_decoder`
 

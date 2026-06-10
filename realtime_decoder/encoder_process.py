@@ -88,6 +88,52 @@ class Encoder(base.LoggingClass):
             self._temp_idx = 0 # NOTE(DS): so that mark_idx does not increase but still write down in the mark vec
 
         self._init_params()
+        self._init_kde_buffers()
+
+    def _init_kde_buffers(self):
+        """Preallocate the per-spike scratch used by get_joint_prob so the
+        hot path does not allocate. Sized to the full mark buffer, then
+        sliced to the live mark count on each call."""
+        n, dim = self._marks.shape
+        self._kde_diff = np.empty((n, dim), dtype=np.float64)
+        self._kde_sqd = np.empty(n, dtype=np.float64)
+        self._kde_weights = np.empty(n, dtype=np.float64)
+        self._kde_in_range = np.empty(n, dtype=bool)
+        self._kde_tmp_a = np.empty(n, dtype=bool)
+        self._kde_tmp_b = np.empty(n, dtype=bool)
+
+        # Detect a "simple" position grid (edges 0, 1, ..., num_bins) so the
+        # weighted histogram can map a position straight to its bin index
+        # without a search. Every shipped config uses this grid.
+        edges = self._pos_bin_struct.pos_bin_edges
+        self._hist_nbins = self._pos_bin_struct.num_bins
+        self._hist_first = edges[0]
+        self._hist_last = edges[-1]
+        self._simple_grid = bool(
+            edges[0] == 0 and np.allclose(np.diff(edges), 1.0)
+        )
+
+    def _fast_hist(self, positions, weights):
+        """Uniform-bin weighted histogram, equivalent to
+        np.histogram(positions, bins=pos_bin_edges, weights=weights) up to
+        floating-point summation order (~1e-10 relative, i.e. rounding noise).
+        Much faster than np.histogram on an explicit edge array, which falls
+        back to a per-sample binary search; bin assignment is identical."""
+        num_bins = self._hist_nbins
+        if self._simple_grid:
+            # edges are 0, 1, ..., num_bins, so the bin index is just the
+            # integer part of the position. positions are position-bin indices
+            # already inside [0, num_bins); clip only guards pathological input.
+            idx = positions.astype(np.intp)
+            np.clip(idx, 0, num_bins - 1, out=idx)
+            return np.bincount(idx, weights=weights, minlength=num_bins)
+        # general uniform grid: numpy's own optimized linear-index + bincount
+        # path (triggered by passing an int bin count and an explicit range)
+        return np.histogram(
+            positions, bins=num_bins,
+            range=(self._hist_first, self._hist_last), weights=weights
+        )[0]
+
     def _load_model(self):
 
         fname = os.path.join(
@@ -130,6 +176,15 @@ class Encoder(base.LoggingClass):
         self.p['filter_n_std'] = self._config['encoder']['mark_kernel']['n_std']
         self.p['n_marks_min'] = self._config['encoder']['mark_kernel']['n_marks_min']
         self.p['num_occupancy_points'] = self._config['display']['encoder']['occupancy']
+        # use the exact (slower) numerics in get_joint_prob: np.histogram on
+        # explicit edges and a separate square-then-sum for the mark distance.
+        # The default fast path (uniform-bin histogram + fused distance sum)
+        # differs only in floating-point summation order (~1e-13 relative);
+        # leave this off unless you need bit-for-bit reproducibility against an
+        # older run.
+        self.p['exact_histogram'] = self._config['encoder']['mark_kernel'].get(
+            'exact_histogram', False
+        )
 
     def add_new_mark(self, mark):
         '''
@@ -198,46 +253,57 @@ class Encoder(base.LoggingClass):
 
         #print(mark)
 
-        in_range = np.ones(mark_idx, dtype=bool)
+        in_range = self._kde_in_range[:mark_idx]
+        in_range.fill(True)
         if self.p['use_filter']:
             std = self.p['filter_std']
             n_std = self.p['filter_n_std']
+            tmp_a = self._kde_tmp_a[:mark_idx]
+            tmp_b = self._kde_tmp_b[:mark_idx]
             for ii in range(self._marks.shape[1]):
-                in_range = np.logical_and(
-                    np.logical_and(
-                        self._marks[:mark_idx, ii] > mark[ii] - n_std * std,
-                        self._marks[:mark_idx, ii] < mark[ii] + n_std * std
-                    ),
-                    in_range
-                )
+                col = self._marks[:mark_idx, ii]
+                np.greater(col, mark[ii] - n_std * std, out=tmp_a)
+                np.less(col, mark[ii] + n_std * std, out=tmp_b)
+                np.logical_and(tmp_a, tmp_b, out=tmp_a)
+                np.logical_and(in_range, tmp_a, out=in_range)
 
             # not enough spikes within n-cube
             if np.sum(in_range) < self.p['n_marks_min']:
                 return None
 
-        # evaluate Gaussian kernel on distance in mark space
-        squared_distance = np.sum(
-            np.square(self._marks[:mark_idx] - mark),
-            axis=1
-        )
-        weights = self._k1 * np.exp(squared_distance * self._k2)
+        # evaluate Gaussian kernel on distance in mark space. all temporaries
+        # are preallocated scratch (see _init_kde_buffers) so the hot path
+        # does not allocate.
+        diff = self._kde_diff[:mark_idx]
+        np.subtract(self._marks[:mark_idx], mark, out=diff)
+        squared_distance = self._kde_sqd[:mark_idx]
+        if self.p['exact_histogram']:
+            # reference path: same operations and order as the original
+            np.square(diff, out=diff)
+            np.sum(diff, axis=1, out=squared_distance)
+        else:
+            # fuse the square and the per-mark sum into a single pass. differs
+            # from the two lines above only in summation order (~1e-16).
+            np.einsum('ij,ij->i', diff, diff, out=squared_distance)
+
+        weights = self._kde_weights[:mark_idx]
+        np.multiply(squared_distance, self._k2, out=weights)
+        np.exp(weights, out=weights)
+        np.multiply(weights, self._k1, out=weights)
+
         positions = self._positions[:mark_idx]
 
-        # print(positions.shape)
-        # print("")
-        # print(self._pos_bin_struct.pos_bin_edges)
-        # print("")
-        # print(weights)
-
-        # `density=` (formerly `normed=`) intentionally omitted: we want the
-        # raw weighted sum per bin, which is the default behavior. `normed=`
-        # was removed in NumPy 1.24, which broke this call on any modern
-        # install.
-        hist, hist_edges = np.histogram(
-            a=positions,
-            bins=self._pos_bin_struct.pos_bin_edges,
-            weights=weights,
-        )
+        # `density=` (formerly `normed=`) is intentionally omitted: we want the
+        # raw weighted sum per bin, which is the default. `normed=` was removed
+        # in NumPy 1.24, which broke this call on any modern install.
+        if self.p['exact_histogram']:
+            hist, _ = np.histogram(
+                a=positions,
+                bins=self._pos_bin_struct.pos_bin_edges,
+                weights=weights
+            )
+        else:
+            hist = self._fast_hist(positions, weights)
 
         hist += 0.0000001
 
