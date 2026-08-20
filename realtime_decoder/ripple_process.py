@@ -35,8 +35,11 @@ class RippleMPISendInterface(base.StandardMPISendInterface):
     def send_ripple(self, dest, msg):
         """Send a ripple event message"""
 
+        # `[msg, MPI.BYTE]` hands MPI the numpy buffer directly. Avoids
+        # the per-send bytes copy the old `msg.tobytes()` allocated.
+        # Wire format unchanged.
         self.comm.Send(
-            buf=msg.tobytes(),
+            buf=[msg, MPI.BYTE],
             dest=dest,
             tag=messages.MPIMessageTag.RIPPLE_DETECTION
         )
