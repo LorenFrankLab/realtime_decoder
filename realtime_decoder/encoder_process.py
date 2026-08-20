@@ -545,8 +545,8 @@ class EncoderManager(base.BinaryRecordBase, base.MessageHandler):
             # either first spike or not enough neighboring spikes
             # (assuming filter is on). still record result
             else:
-                if len(mark_vec) is not 8:
-                   print(f"******************mark_vec: {len(mark_vec)}*******************")
+                #if len(mark_vec) is not 8:
+                #   print(f"******************mark_vec: {len(mark_vec)}*******************")
                 self.write_record(
                     binary_record.RecordIDs.ENCODER_OUTPUT,
                     spike_timestamp, elec_grp_id,
