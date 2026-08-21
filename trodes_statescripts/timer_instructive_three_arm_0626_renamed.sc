@@ -15,7 +15,7 @@ int accept_scm = 0 % whether i will use content shortcut message or not (0 if pr
 
 
 int TS2_durtaion = 3000000		% TS2 timelimit in ms; box time 2400000 = 40 min; 1800000 = 30min, 1200000 = 20min ; RENAMED content_trials_time_limit -> TS2_durtaion
-int content_trials_limit = 50              % TS2 trial limit; if center port does not give reward all the time.
+int content_trials_limit = 80              % TS2 trial limit; if center port does not give reward all the time.
 
 
 int beep_delay = 0                  % delay between detection of RR and sound cue in ms
@@ -98,10 +98,10 @@ int checking_decisiontimeout = 1    	% RENAMED ; outer_reward_window_done -> che
 int centerCount = 0					% number of times rewarded at center
 int backCount = 0					% number of times rewarded at back
 int currTrial_TS2 = 0				% RENAMED; contentTrialCount -> currTrial_TS2 ; number of content trials completed %%rethink about the name
-int contentOuterCount = 0			% number of outer arm visits during content
+int invalid_outer_arm_visits = 0			%RENAMED; number of outer arm visits during content ContentOuterCOunt --> invalid_outer_arm_visits
 int num_arm1_trials = 0				% number of trials targeting arm 1
 int num_arm2_trials = 0				% number of trials targeting arm 2
-int goalTotal = 0					% cumulative outer arm visits
+int goalTotal_TS1 = 0					% cumulative outer arm visits
 int decision_timeout_number = 0		% number of decision timeouts
 int otherCount = 0					% miscellaneous counter
 int contentCorrectDecision = 0		% number of correct decisions during content trials
@@ -160,11 +160,11 @@ end;
 function 5
 	disp(target_location)
 	%disp(centerCount)
-	disp(goalTotal)
+	disp(goalTotal_TS1)
 	disp(currTrial_TS2)
 	disp(contentCorrectDecision)
 	disp(decision_timeout_number)
-	disp(contentOuterCount)
+	disp(invalid_outer_arm_visits)
 	disp(num_arm1_trials)
 	disp(num_arm2_trials)
 end;
@@ -238,6 +238,10 @@ function 10
 	end
 end
 
+function 41
+	disp(timer)
+end
+
 %% timer for time between trials - to start next trial text NEXT_TRIAL
 %% first content trial: 60 sec
 %% start timer for content session here too - moved to function 13
@@ -247,9 +251,10 @@ function 18
 		%disp(content_generation_avail)
 	end
 	disp('Timer starts')
-	disp(timer)
+	trigger(41)
 	do in timer
 		disp('Timer ends')
+		trigger(41)
 		if (wrong_outer_visit == 0 && centerRewardReady == 0 && decision_timeout ==0 && reward_available_out_if_poke == 0 && content_generation_avail == 1) do
 			disp('2nd Centerpoke ready')
 			reward_available_out_if_poke = 1
@@ -436,7 +441,7 @@ callback portin[15] up
 			disp('WRONG ARM2')
 			%trigger(21)
 		else if (taskstate == 2 && (reward_avail == 0 || reward_delivered == 1)) do
-			disp('WRONG OUTER VISIT')
+			disp('INVALID OUTER ARM VISITS')
 		end
 
 	end
@@ -467,7 +472,7 @@ callback portin[9] up
 			disp('WRONG ARM1')
 			%trigger(21)
 		else if (taskstate == 2 && (reward_avail == 0 || reward_delivered == 1)) do
-			disp('WRONG OUTER VISIT')
+			disp('INVALID OUTER ARM VISITS')
 		end
 
 	end
@@ -498,7 +503,7 @@ callback portin[4] up
 			disp('WRONG ARM3')
 			%trigger(21)
 		else if (taskstate == 2 && (reward_avail == 0 || reward_delivered == 1)) do
-			disp('WRONG OUTER VISIT')
+			disp('INVALID OUTER ARM VISITS')
 		end
 
 	end

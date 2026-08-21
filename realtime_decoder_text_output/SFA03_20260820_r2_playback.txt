@@ -1,0 +1,69 @@
+Rank 0 past barrier
+Rank 1 past barrier
+initial number of posterior buffer values: 74
+Rank 2 past barrier
+state_labels: ['state', ' ', 'thresh']
+Rank 3 past barrier
+Rank 4 past barrier
+Rank 5 past barrier
+Rank 6 past barrier
+Rank 7 past barrier
+Rank 8 past barrier
+Rank 9 past barrier
+Rank 10 past barrier
+Rank 11 past barrier
+Rank 12 past barrier
+Rank 13 past barrier
+Rank 14 past barrier
+Rank 15 past barrier
+Rank 16 past barrier
+Rank 17 past barrier
+Rank 18 past barrier
+Rank 19 past barrier
+***************************************
+   All ranks are set up, ok to start   
+***************************************
+x_env.shape = (15, 8)
+num_signals: 8
+Decoder 0 firing rate: (mean: 0.0 std: 0.0 )
+position 40.0 velocity 1.21 segment 2 raw_x 895.0 raw_y 343.0 angle 59.04 angle_well_1 69.5 angle_well_2 172.2
+Number of decoder occupancy points: 100
+Decoder 0 firing rate: (mean: 241.629 std: 242.587 )
+position 40.0 velocity 9.67 segment 2 raw_x 874.0 raw_y 370.0 angle -0.0 angle_well_1 63.2 angle_well_2 170.8
+Number of decoder occupancy points: 200
+position 24.0 velocity 34.31 segment 1 raw_x 404.0 raw_y 393.0 angle 113.7 angle_well_1 19.1 angle_well_2 125.5
+Number of decoder occupancy points: 300
+Decoder 0 firing rate: (mean: 328.001 std: 288.974 )
+[proximity] ENTERED center-well zone (dist 14.1 <= 15), task_state 1
+Number of decoder occupancy points: 400
+position 4.0 velocity 8.01 segment 0 raw_x 690.0 raw_y 656.0 angle 90.0 angle_well_1 60.2 angle_well_2 134.5
+[proximity] LEFT center-well zone (dist 16.1 > 15), task_state 1
+[proximity] ENTERED center-well zone (dist 13.8 <= 15), task_state 1
+[proximity] LEFT center-well zone (dist 15.7 > 15), task_state 1
+Decoder 0 firing rate: (mean: 373.715 std: 306.732 )
+Number of decoder occupancy points: 500
+position 24.0 velocity 1.65 segment 1 raw_x 398.0 raw_y 372.0 angle 129.09 angle_well_1 14.2 angle_well_2 133.1
+[proximity] ENTERED center-well zone (dist 13.6 <= 15), task_state 1
+ 
+ 
++++++++++++++++++++++++++++++++
+[[[ 0.  0.  0.  0.  0.  0. 26.  0.  0.  0.]
+  [ 0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]
+  [14.  0.  0. 16.  0.  0.  0.  0.  0.  0.]
+  [ 0. 14. 26.  0.  8.  0.  0.  0.  0.  0.]
+  [ 0.  0.  0.  0.  0.  0.  0.  0.  0.  0.]]]
+Replay arm 2 detected with more than min unique trodes in ts 1
+Replay arm 2 detected with target posterior prob: 0.337 with threshold: 0.25
+num spikes(TS1) : 6, [26. 14. 16. 14. 26.  8.]
+Unique trodes(TS1): 4, [ 8. 14. 16. 26.]
+position 3.0 velocity 1.23 segment 0 raw_x 692.0 raw_y 688.0 angle -32.47 angle_well_1 60.3 angle_well_2 133.7
+Decoder 0 firing rate: (mean: 360.33 std: 307.424 )
+[proximity] LEFT center-well zone (dist 15.6 > 15), task_state 1
+Number of decoder occupancy points: 600
+position 37.0 velocity 16.91 segment 2 raw_x 851.0 raw_y 419.0 angle 24.78 angle_well_1 63.6 angle_well_2 164.8
+[proximity] ENTERED center-well zone (dist 14.3 <= 15), task_state 1
+Number of decoder occupancy points: 700
+[proximity] LEFT center-well zone (dist 15.2 > 15), task_state 1
+[mpiexec@westerlies] Sending Ctrl-C to processes as requested
+[mpiexec@westerlies] Press Ctrl-C again to force abort
+Ctrl-C caught... cleaning up processes

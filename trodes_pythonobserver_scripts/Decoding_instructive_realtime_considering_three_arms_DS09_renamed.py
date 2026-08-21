@@ -635,7 +635,7 @@ def doOuter(val):
 					print("SCQTMESSAGE: dio = "+str(outerWells[num])+";\n")
 					print("SCQTMESSAGE: trigger(4);\n")
 				
-			print("SCQTMESSAGE: goalTotal = "+str(allGoal)+";\n") # update goaltotal in SC
+			print("SCQTMESSAGE: goalTotal_TS1 = "+str(allGoal)+";\n") # update goaltotal_TS1 in SC
 
 		else:   # wrong well; add to forage record if newly visited
 			print("SCQTMESSAGE: otherCount = otherCount + 1;\n") # update othercount in SC
@@ -891,11 +891,11 @@ def makewhitenoise():  #play white noise for duration of lockout
 	stream.write(data)
 	stream.close()
 	p.terminate()
-	
+
 # Function: generate cowbell sound
 def generate_epoch_end_song():
 	File='Jeopardy.wav'
-	volume_scale = 0.3
+	volume_scale = 0.1
 	spf = wave.open(File, 'rb')
 	signal = spf.readframes(-1)
 	signal = np.frombuffer(signal, dtype='Int16')
@@ -1096,9 +1096,9 @@ def callback(line):
 		correct_trial_bit = False
 		
 	# outer wrong arm visit at the wrong time
-	if line.find("WRONG OUTER VISIT") >=0:
+	if line.find("INVALID OUTER ARM VISITS") >=0:
 		makewhitenoise()
-		print("SCQTMESSAGE: contentOuterCount = contentOuterCount + 1; \n")
+		print("SCQTMESSAGE: invalid_outer_arm_visits = invalid_outer_arm_visits + 1; \n")
 		print("SCQTMESSAGE: reward_available_out_if_poke = 0; \n") 
 		print("SCQTMESSAGE: wrong_outer_visit = 1; \n") 
 		
@@ -1279,10 +1279,12 @@ timer_mean = 6000 #ms         # timer average; interval between beeps -- 20 is f
 timer_max = 12000 #ms             # timer max;  maximum timer between trial is 40s
 timer_min = 3000 #ms              # timer min;
 
-# This panal is about reward delivery at center in TS2;
-reward_center_during_TS2 = True 
-give_only_at_the_correct_bit = True # only correct at center in TS2; 
-half_reward_at_center = False # TS1: if giving half rewards at center during TS1; False = 50%, True = 100%
+# TS2: This panal is about reward delivery at center in TS2;
+reward_center_during_TS2 = False 
+give_only_at_the_correct_bit = True # osnly correct at center in TS2; 
+
+#TS1
+half_reward_at_center = True # TS1: if giving half rewards at center during TS1; False = 100%, True = 50%
 
 # TS1 outer arm variable
 outerarm_required_rewards = 12  # number of visits required to change task state from 1 to 2
