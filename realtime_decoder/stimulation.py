@@ -1093,8 +1093,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         '''
         self._arm_ps_buff[ind, self._dd_ind] = arm_probs
 
-        (ps_arm1, ps_arm2, ps_arm3,
-         ps_arm1_base, ps_arm2_base, ps_arm3_base) = self._compute_region_probs(
+        (ps_arm1, ps_arm2, ps_arm3, ps_arm1_base, ps_arm2_base, ps_arm3_base) = self._compute_region_probs(
             marginal_prob
         )
 
@@ -1435,8 +1434,12 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         desired_number_of_scm_min = np.ceil(self._num_scm_each_arm_per_minute_min * self._elapsed_minutes)
         desired_number_of_scm_max = np.ceil(self._num_scm_each_arm_per_minute_max * self._elapsed_minutes)
         
-        #NOTE(DS): to make it even
-        desired_number_of_scm_match = np.min([self._num_rewards[1],self._num_rewards[2]])
+        #NOTE(DS): to make it even; 
+        arm1_events_total =  len(self._arm_1_posterior)-  self._initial_number_of_posterior_buffer_values
+        arm2_events_total =  len(self._arm_2_posterior)-  self._initial_number_of_posterior_buffer_values
+        desired_number_of_scm_match = np.min([arm1_events_total,arm2_events_total])
+
+
 
         print(f"elapsed minutes: {self._elapsed_minutes} minutes")
         if (desired_number_of_scm_match < desired_number_of_scm_min):
@@ -1495,8 +1498,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p_replay['primary_arm_threshold'] = np.sort(self._arm_1_posterior)[index_for_desired_number_of_scm1]
         self.p_replay['secondary_arm_threshold'] = np.sort(self._arm_2_posterior)[index_for_desired_number_of_scm2]
 
-        print(f"number of arm 1 detected events: {len(self._arm_1_posterior)-  self._initial_number_of_posterior_buffer_values}" )
-        print(f"number of arm 2 detected events:{len(self._arm_2_posterior)-  self._initial_number_of_posterior_buffer_values}" )
+        print(f"number of arm 1 detected events: {arm1_events_total}" )
+        print(f"number of arm 2 detected events: {arm2_events_total}" )
         print(f"number of arm 1 below threshold but many cell events:{self._arm_1_lower_threshold_but_many_spikes_event}")
         print(f"number of arm 2 below threshold but many cell events:{self._arm_2_lower_threshold_but_many_spikes_event}")
         '''
@@ -1745,7 +1748,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._angle_buffer = np.ones(div) * -1000
         self._angle_buffer_ind = 0
 
-        # generate the lookup mapping. doesn't need to be an OrderedDict
+        # generate the lookup mapping. doesn't need to be an OrderedDicdt
         self._decoder_rank_ind_map = {} # key: rank, value: index
         for ii, rank in enumerate(self._config['rank']['decoders']):
             self._decoder_rank_ind_map[rank] = ii
