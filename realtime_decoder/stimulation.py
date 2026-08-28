@@ -1390,9 +1390,9 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 else:
                     print('ERROR: Replay arms are not 1, 2, or 3. see stimulation.py')
                 if self._three_arm:
-                    print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}; arm3 remote-rep detections (scm 35): {self._num_arm3_detections}")
+                    print(f"num_SCMs: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}; arm3 remote-rep detections (scm 35): {self._num_arm3_detections}")
                 else:
-                    print(f"num_rewards: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}")
+                    print(f"num_SCMs: arm1: {self._num_rewards[1]}, arm2: {self._num_rewards[2]}, total: {np.sum(self._num_rewards[1:])}")
                 #print(f"avg arm representation: {avg_arm_ps}")
                 print(f"---------------------------------")
                 print(f" ")

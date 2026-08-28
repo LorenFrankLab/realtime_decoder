@@ -1794,7 +1794,7 @@ class DecodingResultsWindow(QMainWindow):
         ):
             sb_string += f"(Rank {rank}: {pct:.3f}%), "
 
-        sb_string += f"Tot. Rewards: {self._sbdata['rewards_delivered']}"
+        sb_string += f"Tot. SCMs: {self._sbdata['rewards_delivered']}"
 
         self.statusBar().showMessage(sb_string)
 
