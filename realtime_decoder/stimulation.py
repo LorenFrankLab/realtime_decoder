@@ -1341,7 +1341,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
                 print(f" ")
                 print(f" ")
                 print(f"+++++++++++++++++++++++++++++++")
-                print(self._enc_ci_buff)
                 print(f"Replay arm {arm} detected with more than min unique trodes in ts {self._task_state}")
                 print(f"Replay arm {arm} detected with target posterior prob: {target_posterior_prob} with threshold: {arm_thresh}")
 
@@ -1363,21 +1362,22 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         send_shortcut = self._check_send_shortcut(
             self.p_replay['enabled']
-        ) and (above_threshold or num_spikes_in_event >= 6) and (not potentially_duplicated_spikes) # NOTE(DS): num_spikes_in_event >6 is to detect SWR
+        ) and (above_threshold or num_spikes_in_event >= 20) and (not potentially_duplicated_spikes) # NOTE(DS): num_spikes_in_event >6 is to detect SWR
 
         if num_unique >= self.p_replay['min_unique_trodes']:
 
             if send_shortcut:
+                print(self._enc_ci_buff)
                 if arm == 1:
                     self._trodes_client.send_statescript_shortcut_message(14)
                     self._num_rewards[arm] += 1
                     self.send_interface.send_num_rewards(self._num_rewards)
-                    print(f"Replay arm {arm} scm sent")
+                    print(f"**********Replay arm {arm} scm sent**********")
                 elif arm == 2:
                     self._trodes_client.send_statescript_shortcut_message(6)
                     self._num_rewards[arm] += 1
                     self.send_interface.send_num_rewards(self._num_rewards)
-                    print(f"Replay arm {arm} scm sent")
+                    print(f"**********Replay arm {arm} scm sent**********")
                 elif arm == 3:
                     # arm-3 remote representation detected (3-arm task). scm 35 is
                     # a marker only (statescript function 35 just disp's it); no
