@@ -1285,7 +1285,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
     def _handle_replay(self, arm, msg):
         """Handle a replay event for a non-instructive task"""
-        above_threshold = False
         target_posterior_prob = None
 
         # assumes already satisfied event lockout and minimum unique
@@ -1303,17 +1302,14 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         ind = self._dec_ind
         avg_target_arm_ps = np.mean(self._region_ps_buff[ind],axis = 0) #NOTE(DS): target arm + whole center
         if arm == 1:
-            above_threshold = avg_target_arm_ps[1] >= arm1_thresh
             target_posterior_prob = np.round(avg_target_arm_ps[1],3)
             arm_thresh = arm1_thresh
             arm_num_spike_thresh = arm1_num_spike_thresh
         elif arm == 2:
-            above_threshold = avg_target_arm_ps[2] >= arm2_thresh
             target_posterior_prob = np.round(avg_target_arm_ps[2],3)
             arm_thresh = arm2_thresh
             arm_num_spike_thresh = arm2_num_spike_thresh
         elif arm == 3:
-            above_threshold = avg_target_arm_ps[3] >= arm3_thresh
             target_posterior_prob = np.round(avg_target_arm_ps[3],3)
             arm_thresh = arm3_thresh
             arm_num_spike_thresh = arm3_num_spike_thresh
@@ -1334,17 +1330,32 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
             self._elapsed_minutes = (curent_time - self._task_state_2_start_time)/self._timepoints_per_sec/60 #minutes
 
+        # NOTE(DS): joint (num_spikes, posterior) threshold check, lexicographic --
+        # matches the (num_spikes_in_event, posterior) tuple ordering used to pick
+        # arm_num_spike_thresh/arm_thresh in _update_scm_threshold. An event passes
+        # if it has strictly more spikes than the threshold, or ties the threshold
+        # spike count and clears the posterior threshold too.
+        meets_joint_threshold = (
+            num_spikes_in_event > arm_num_spike_thresh
+        ) or (
+            num_spikes_in_event == arm_num_spike_thresh and target_posterior_prob >= arm_thresh
+        )
+
         if num_unique < self.p_replay['min_unique_trodes']:
-            print(f"Replay arm {arm} detected less than min unique trodes in ts {self._task_state}")
+            print(f"Replay arm {arm} NOT detected: only {num_unique} unique trodes, need >= {self.p_replay['min_unique_trodes']}")
         else:
-            if above_threshold == False:
-                print(f"Replay arm {arm} detected with lower target posterior prob: {target_posterior_prob} than threshold: {arm_thresh}")
+            if meets_joint_threshold:
+                if num_spikes_in_event > arm_num_spike_thresh:
+                    reason = f"num_spikes {num_spikes_in_event} > spike threshold {arm_num_spike_thresh} (posterior {target_posterior_prob} not required)"
+                else:
+                    reason = f"num_spikes {num_spikes_in_event} == spike threshold {arm_num_spike_thresh} and posterior {target_posterior_prob} >= posterior threshold {arm_thresh}"
+                print(f"+++ Replay arm {arm} DETECTED (ts {self._task_state}): {reason}")
             else:
-                print(f" ")
-                print(f" ")
-                print(f"+++++++++++++++++++++++++++++++")
-                print(f"Replay arm {arm} detected with more than min unique trodes in ts {self._task_state}")
-                print(f"Replay arm {arm} detected with target posterior prob: {target_posterior_prob} with threshold: {arm_thresh}")
+                print(
+                    f"Replay arm {arm} NOT detected (ts {self._task_state}): "
+                    f"num_spikes {num_spikes_in_event} (spike threshold {arm_num_spike_thresh}), "
+                    f"posterior {target_posterior_prob} (posterior threshold {arm_thresh})"
+                )
 
             if self._task_state == 2:
                 #NOTE(DS): To compute the threshold that matches the expected scm per minutes
@@ -1362,17 +1373,6 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         if num_unique == 2:
             if np.abs(np.diff(np.unique(trodes_of_spike))) == 1:
                  potentially_duplicated_spikes = True
-
-        # NOTE(DS): joint (num_spikes, posterior) threshold check, lexicographic --
-        # matches the (num_spikes_in_event, posterior) tuple ordering used to pick
-        # arm_num_spike_thresh/arm_thresh in _update_scm_threshold. An event passes
-        # if it has strictly more spikes than the threshold, or ties the threshold
-        # spike count and clears the posterior threshold too.
-        meets_joint_threshold = (
-            num_spikes_in_event > arm_num_spike_thresh
-        ) or (
-            num_spikes_in_event == arm_num_spike_thresh and target_posterior_prob >= arm_thresh
-        )
 
         send_shortcut = self._check_send_shortcut(
             self.p_replay['enabled']
