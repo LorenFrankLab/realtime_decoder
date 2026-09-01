@@ -211,20 +211,18 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self._num_scm_each_arm_per_minute = self._config['stimulation']['num_each_arm_per_minute']
         self._num_scm_each_arm_per_minute_max = self._config['stimulation']['num_each_arm_per_minute_max']
         self._num_scm_each_arm_per_minute_min = self._config['stimulation']['num_each_arm_per_minute_min']
-        self._arm_1_posterior = [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25001,0.25002,
-                                    0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,
-                                    0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,] #NOTE(DS): in case the buffer is too small
-        self._arm_2_posterior = [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25001,0.25002,
-                                    0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,
-                                    0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,] #NOTE(DS): in case the buffer is too small
+        # NOTE(DS): entries are (num_spikes_in_event, posterior_prob) tuples so the
+        # threshold-picking sort in _update_scm_threshold can rank by spike count
+        # first, posterior as tiebreaker. Seed rows use num_spikes=0 so they always
+        # sort below any real detection (which always has num_spikes >= min_unique_trodes).
+        _seed_posteriors = [0.25]*24 + [0.25001,0.25002] + [0.25]*50 #NOTE(DS): in case the buffer is too small
+        self._arm_1_posterior = [(0, v) for v in _seed_posteriors]
+        self._arm_2_posterior = [(0, v) for v in _seed_posteriors]
         self._initial_number_of_posterior_buffer_values = np.array(self._arm_1_posterior).shape[0]
         print(f"initial number of posterior buffer values: {self._initial_number_of_posterior_buffer_values}")
         self._task_state_2_start_time = None
         self._timepoints_per_sec = self._config['sampling_rate']['spikes']
         self._elapsed_minutes = 0
-
-        self._arm_1_lower_threshold_but_many_spikes_event = 0
-        self._arm_2_lower_threshold_but_many_spikes_event = 0
 
 
     def handle_message(self, msg, mpi_status):
@@ -1289,28 +1287,36 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         """Handle a replay event for a non-instructive task"""
         above_threshold = False
         target_posterior_prob = None
-        spike_number_threshold = 20 #NOTE(DS): previous project had 6 (meaning if there were >= 6, the detection posterior threshold is always 0.25 no matter what); now we want to get rid of it so increased to 20. 
 
         # assumes already satisfied event lockout and minimum unique
         # trodes criteria. all these events should therefore be recorded
         arm1_thresh = self.p_replay['primary_arm_threshold']
         arm2_thresh = self.p_replay['secondary_arm_threshold']
         arm3_thresh = self.p_replay['secondary_arm_threshold']
+        # NOTE(DS): arm 3 aliases the secondary (arm 2) spike-count threshold too,
+        # same as it does for the posterior threshold above.
+        arm1_num_spike_thresh = self.p_replay['primary_num_spike_threshold']
+        arm2_num_spike_thresh = self.p_replay['secondary_num_spike_threshold']
+        arm3_num_spike_thresh = self.p_replay['secondary_num_spike_threshold']
         arm_thresh = None
+        arm_num_spike_thresh = None
         ind = self._dec_ind
         avg_target_arm_ps = np.mean(self._region_ps_buff[ind],axis = 0) #NOTE(DS): target arm + whole center
         if arm == 1:
             above_threshold = avg_target_arm_ps[1] >= arm1_thresh
             target_posterior_prob = np.round(avg_target_arm_ps[1],3)
             arm_thresh = arm1_thresh
+            arm_num_spike_thresh = arm1_num_spike_thresh
         elif arm == 2:
             above_threshold = avg_target_arm_ps[2] >= arm2_thresh
             target_posterior_prob = np.round(avg_target_arm_ps[2],3)
             arm_thresh = arm2_thresh
+            arm_num_spike_thresh = arm2_num_spike_thresh
         elif arm == 3:
             above_threshold = avg_target_arm_ps[3] >= arm3_thresh
             target_posterior_prob = np.round(avg_target_arm_ps[3],3)
             arm_thresh = arm3_thresh
+            arm_num_spike_thresh = arm3_num_spike_thresh
 
         self._replay_event_ts = msg[0]['bin_timestamp_r']
 
@@ -1333,12 +1339,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         else:
             if above_threshold == False:
                 print(f"Replay arm {arm} detected with lower target posterior prob: {target_posterior_prob} than threshold: {arm_thresh}")
-                if num_spikes_in_event >= spike_number_threshold:
-                    if arm == 1:
-                        self._arm_1_lower_threshold_but_many_spikes_event += 1
-                    elif arm == 2:
-                        self._arm_2_lower_threshold_but_many_spikes_event += 1
-            else: 
+            else:
                 print(f" ")
                 print(f" ")
                 print(f"+++++++++++++++++++++++++++++++")
@@ -1347,10 +1348,11 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
             if self._task_state == 2:
                 #NOTE(DS): To compute the threshold that matches the expected scm per minutes
+                # entries are (num_spikes_in_event, posterior_prob) -- see _update_scm_threshold
                 if arm == 1:
-                    self._arm_1_posterior.append(target_posterior_prob)
+                    self._arm_1_posterior.append((num_spikes_in_event, target_posterior_prob))
                 elif arm == 2:
-                    self._arm_2_posterior.append(target_posterior_prob)
+                    self._arm_2_posterior.append((num_spikes_in_event, target_posterior_prob))
 
 
         print(f"num spikes(TS{self._task_state}) : {num_spikes_in_event}, {trodes_of_spike}")
@@ -1361,9 +1363,20 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             if np.abs(np.diff(np.unique(trodes_of_spike))) == 1:
                  potentially_duplicated_spikes = True
 
+        # NOTE(DS): joint (num_spikes, posterior) threshold check, lexicographic --
+        # matches the (num_spikes_in_event, posterior) tuple ordering used to pick
+        # arm_num_spike_thresh/arm_thresh in _update_scm_threshold. An event passes
+        # if it has strictly more spikes than the threshold, or ties the threshold
+        # spike count and clears the posterior threshold too.
+        meets_joint_threshold = (
+            num_spikes_in_event > arm_num_spike_thresh
+        ) or (
+            num_spikes_in_event == arm_num_spike_thresh and target_posterior_prob >= arm_thresh
+        )
+
         send_shortcut = self._check_send_shortcut(
             self.p_replay['enabled']
-        ) and (above_threshold or num_spikes_in_event >= spike_number_threshold) and (not potentially_duplicated_spikes) # NOTE(DS): num_spikes_in_event >6 is to detect SWR
+        ) and meets_joint_threshold and (not potentially_duplicated_spikes)
 
         if num_unique >= self.p_replay['min_unique_trodes']:
 
@@ -1481,8 +1494,8 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
             print(f"using num_scm_per_minutes_each_arm_match: {num_scm_each_arm_per_minute_match}")
 
 
-        desired_number_of_scm_arm1 = desired_number_of_scm - self._arm_1_lower_threshold_but_many_spikes_event
-        desired_number_of_scm_arm2 = desired_number_of_scm - self._arm_2_lower_threshold_but_many_spikes_event
+        desired_number_of_scm_arm1 = desired_number_of_scm
+        desired_number_of_scm_arm2 = desired_number_of_scm
 
         if desired_number_of_scm_arm1 < 1:
             desired_number_of_scm_arm1 = 0
@@ -1496,17 +1509,20 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
 
 
-        self.p_replay['primary_arm_threshold'] = np.sort(self._arm_1_posterior)[index_for_desired_number_of_scm1]
-        self.p_replay['secondary_arm_threshold'] = np.sort(self._arm_2_posterior)[index_for_desired_number_of_scm2]
-        
+        # NOTE(DS): sort by (num_spikes_in_event, posterior_prob) -- spike count
+        # first, posterior as tiebreaker -- then pull both components of the
+        # selected event as the new paired thresholds (see _handle_replay).
+        sorted_arm1 = sorted(self._arm_1_posterior)
+        sorted_arm2 = sorted(self._arm_2_posterior)
+        selected_arm1 = sorted_arm1[index_for_desired_number_of_scm1]
+        selected_arm2 = sorted_arm2[index_for_desired_number_of_scm2]
+        self.p_replay['primary_num_spike_threshold'] = selected_arm1[0]
+        self.p_replay['primary_arm_threshold'] = selected_arm1[1]
+        self.p_replay['secondary_num_spike_threshold'] = selected_arm2[0]
+        self.p_replay['secondary_arm_threshold'] = selected_arm2[1]
+
         print(f"number of arm 1 detected events: {arm1_events_total}" )
         print(f"number of arm 2 detected events: {arm2_events_total}" )
-        print(f"number of arm 1 below threshold but many cell events:{self._arm_1_lower_threshold_but_many_spikes_event}")
-        print(f"number of arm 2 below threshold but many cell events:{self._arm_2_lower_threshold_but_many_spikes_event}")
-        
-        #print(f"index for desired number of scm2: {index_for_desired_number_of_scm2}")
-        #print(f" arm 1 all posterior values: {np.sort(self._arm_1_posterior)}")
-        #print(f" arm 2 all posterior values: {np.sort(self._arm_2_posterior)}")
         '''
         baseline_threshold = 0.25
         diff_num_detected_event_threshold = 2
@@ -1544,7 +1560,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p_replay['primary_arm_threshold'] = np.sort(self._arm_1_posterior)[index_for_desired_number_of_scm_arm1]
         self.p_replay['secondary_arm_threshold'] = np.sort(self._arm_2_posterior)[index_for_desired_number_of_scm_arm2]
         '''
-        print(f"new arm 1 thresh: {self.p_replay['primary_arm_threshold']} and arm 2 thresh: {self.p_replay['secondary_arm_threshold']}")
+        print(f"new arm 1 thresh: {self.p_replay['primary_arm_threshold']} (num_spikes>{self.p_replay['primary_num_spike_threshold']}) and arm 2 thresh: {self.p_replay['secondary_arm_threshold']} (num_spikes>{self.p_replay['secondary_num_spike_threshold']})")
 
     def _find_replay_instructive(self, msg):
         """Look for a potential replay event for an instructive task"""
@@ -1893,6 +1909,11 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         self.p_replay = {}
         for k, v in self._config['stimulation']['replay'].items():
             self.p_replay[k] = v
+        # NOTE(DS): adaptive spike-count floor for send_shortcut, paired with
+        # primary/secondary_arm_threshold (posterior). Defaults to 2 so existing
+        # configs that don't set these explicitly still work.
+        self.p_replay.setdefault('primary_num_spike_threshold', 2)
+        self.p_replay.setdefault('secondary_num_spike_threshold', 2)
 
         self.p_ripples = {}
         for k, v in self._config['stimulation']['ripples'].items():
