@@ -1289,6 +1289,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         """Handle a replay event for a non-instructive task"""
         above_threshold = False
         target_posterior_prob = None
+        spike_number_threshold = 20 #NOTE(DS): previous project had 6 (meaning if there were >= 6, the detection posterior threshold is always 0.25 no matter what); now we want to get rid of it so increased to 20. 
 
         # assumes already satisfied event lockout and minimum unique
         # trodes criteria. all these events should therefore be recorded
@@ -1332,7 +1333,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
         else:
             if above_threshold == False:
                 print(f"Replay arm {arm} detected with lower target posterior prob: {target_posterior_prob} than threshold: {arm_thresh}")
-                if num_spikes_in_event >= 6:
+                if num_spikes_in_event >= spike_number_threshold:
                     if arm == 1:
                         self._arm_1_lower_threshold_but_many_spikes_event += 1
                     elif arm == 2:
@@ -1362,7 +1363,7 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         send_shortcut = self._check_send_shortcut(
             self.p_replay['enabled']
-        ) and (above_threshold or num_spikes_in_event >= 20) and (not potentially_duplicated_spikes) # NOTE(DS): num_spikes_in_event >6 is to detect SWR
+        ) and (above_threshold or num_spikes_in_event >= spike_number_threshold) and (not potentially_duplicated_spikes) # NOTE(DS): num_spikes_in_event >6 is to detect SWR
 
         if num_unique >= self.p_replay['min_unique_trodes']:
 
@@ -1497,11 +1498,15 @@ class TwoArmTrodesStimDecider(base.BinaryRecordBase, base.MessageHandler):
 
         self.p_replay['primary_arm_threshold'] = np.sort(self._arm_1_posterior)[index_for_desired_number_of_scm1]
         self.p_replay['secondary_arm_threshold'] = np.sort(self._arm_2_posterior)[index_for_desired_number_of_scm2]
-
+        
         print(f"number of arm 1 detected events: {arm1_events_total}" )
         print(f"number of arm 2 detected events: {arm2_events_total}" )
         print(f"number of arm 1 below threshold but many cell events:{self._arm_1_lower_threshold_but_many_spikes_event}")
         print(f"number of arm 2 below threshold but many cell events:{self._arm_2_lower_threshold_but_many_spikes_event}")
+        
+        #print(f"index for desired number of scm2: {index_for_desired_number_of_scm2}")
+        #print(f" arm 1 all posterior values: {np.sort(self._arm_1_posterior)}")
+        #print(f" arm 2 all posterior values: {np.sort(self._arm_2_posterior)}")
         '''
         baseline_threshold = 0.25
         diff_num_detected_event_threshold = 2
